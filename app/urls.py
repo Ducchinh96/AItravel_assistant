@@ -1,6 +1,6 @@
 from django.urls import path
 from . import views
-from .views import  ForgotPasswordView, ResetPasswordView, RegisterView, LoginView, LogoutView
+from .views import  ForgotPasswordView, RegisterView, LoginView, LogoutView
 
 urlpatterns = [
     # Corrected endpoint: '/api/suggest-trip/' (was misspelled 'suggets')
@@ -14,7 +14,6 @@ urlpatterns = [
     #Đăng xuất
     path('api/logout/', LogoutView.as_view(), name='logout'),
     # #Quên mật khẩu
-    # path('api/forgot-password/', ForgotPasswordView.as_view(), name='forgot_password'),
-    # path('api/reset-password/', ResetPasswordView.as_view(), name='reset_password'),
+    path('api/forgot-password/', ForgotPasswordView.as_view(), name='forgot_password'),
 
 ]

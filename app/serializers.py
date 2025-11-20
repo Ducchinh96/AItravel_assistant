@@ -9,10 +9,6 @@ class ChatTurnSerializer(serializers.ModelSerializer):
         fields = ["id", "text_user", "text_ai", "created_at"]
         read_only_fields = ["id", "created_at"]
 
-class ResetPasswordSerializer(Serializer):
-    email = CharField(required=True)
-    confirmation_code = CharField(required=True)
-    new_password = CharField(required=True)
 class ChangePasswordSerializer(serializers.Serializer):
     old_password = serializers.CharField(required=True)
     new_password = serializers.CharField(required=True)

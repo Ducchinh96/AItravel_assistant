@@ -10,7 +10,6 @@ from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.http import HttpResponse, JsonResponse
 from rest_framework import generics, status, permissions
-from .serializers import ResetPasswordSerializer
 from rest_framework.decorators import api_view
 import random
 import os
@@ -192,23 +191,6 @@ class ForgotPasswordView(APIView):
         except Exception as e:
             return Response({'error': 'Failed to send email.', 'details': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-class ResetPasswordView(APIView):
-    def post(self, request):
-        serializer = ResetPasswordSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        email = serializer.validated_data['email']
-        confirmation_code = serializer.validated_data['confirmation_code']
-        new_password = serializer.validated_data['new_password']
-        cached_code = cache.get(f"password_reset_code_{email}")
-        if not cached_code or cached_code != confirmation_code:
-            return Response({'error': 'Invalid or expired confirmation code!'}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            user = User.objects.get(email=email)
-        except User.DoesNotExist:
-            return Response({'error': 'User with this email does not exist!'}, status=status.HTTP_404_NOT_FOUND)
-        user.set_password(new_password); user.save()
-        cache.delete(f"password_reset_code_{email}")
-        return Response({'message': 'Password has been reset successfully!'}, status=status.HTTP_200_OK)
+
 
 def is_admin(user): return user.is_authenticated and user.is_superuser

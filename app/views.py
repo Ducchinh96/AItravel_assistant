@@ -1,6 +1,6 @@
 
 from app.models import ChatTurn
-from .serializers import ChatTurnSerializer
+from .serializers import ChatTurnSerializer, ResetPasswordSerializer
 from .utils.api_ai import ask_ai   
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -172,7 +172,7 @@ class LogoutView(APIView):
 
 class ForgotPasswordView(APIView):
     def post(self, request):
-        email = request.data.get('emax`il')
+        email = request.data.get('email')
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
@@ -192,5 +192,23 @@ class ForgotPasswordView(APIView):
             return Response({'error': 'Failed to send email.', 'details': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class ResetPasswordView(APIView):
+    def post(self, request):
+        serializer = ResetPasswordSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        email = serializer.validated_data['email']
+        confirmation_code = serializer.validated_data['confirmation_code']
+        new_password = serializer.validated_data['new_password']
+        cached_code = cache.get(f"password_reset_code_{email}")
+        if not cached_code or cached_code != confirmation_code:
+            return Response({'error': 'Invalid or expired confirmation code!'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({'error': 'User with this email does not exist!'}, status=status.HTTP_404_NOT_FOUND)
+        user.set_password(new_password); user.save()
+        cache.delete(f"password_reset_code_{email}")
+        return Response({'message': 'Password has been reset successfully!'}, status=status.HTTP_200_OK)
 
 def is_admin(user): return user.is_authenticated and user.is_superuser

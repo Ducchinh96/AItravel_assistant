@@ -15,5 +15,10 @@ urlpatterns = [
     path('api/logout/', LogoutView.as_view(), name='logout'),
     #Quên mật khẩu
     path('api/forgot-password/', ForgotPasswordView.as_view(), name='forgot_password'),
-    path('api/reset-password/',ResetPasswordView.as_view(), name='reset-password')
+    path('api/reset-password/',ResetPasswordView.as_view(), name='reset-password'),
+
+    #tao lich trinh
+    path('api/itineraries/', views.ItineraryListCreateView.as_view(), name='itinerary-list-create'),
+    path('api/itineraries/public/', views.PublicItineraryListView.as_view(), name='public-itinerary-list'),
+
 ]

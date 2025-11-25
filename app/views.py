@@ -1,6 +1,6 @@
 
-from app.models import ChatTurn
-from .serializers import ChatTurnSerializer, ResetPasswordSerializer
+from app.models import ChatTurn, Itinerary
+from .serializers import ChatTurnSerializer, ItinerarySerializer, ResetPasswordSerializer
 from .utils.api_ai import ask_ai   
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -212,3 +212,36 @@ class ResetPasswordView(APIView):
         return Response({'message': 'Password has been reset successfully!'}, status=status.HTTP_200_OK)
 
 def is_admin(user): return user.is_authenticated and user.is_superuser
+
+#tao lich trinh
+class ItineraryListCreateView(generics.ListCreateAPIView):
+    serializer_class = ItinerarySerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        queryset = Itinerary.objects.all()
+        is_fixed = self.request.query_params.get('is_fixed')
+        if is_fixed is not None:
+            if is_fixed.lower() in ['true', '1']:
+                queryset = queryset.filter(is_fixed=True)
+            elif is_fixed.lower() in ['false', '0']:
+                queryset = queryset.filter(is_fixed=False)
+        return queryset
+
+    def perform_create(self, serializer):
+        # If user is authenticated, assign the user. Otherwise leave it null (or handle as needed)
+        if self.request.user.is_authenticated:
+            serializer.save(user=self.request.user)
+        else:
+            serializer.save()
+class PublicItineraryListView(generics.ListAPIView):
+    """
+    Public Community Feed - List all public itineraries
+    Anyone can view (no authentication required)
+    """
+    serializer_class = ItinerarySerializer
+    permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        # Only show public itineraries, ordered by newest first
+        return Itinerary.objects.filter(is_public=True).order_by('-created_at')

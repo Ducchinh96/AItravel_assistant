@@ -1,6 +1,6 @@
 
 from app.models import ChatTurn
-from .serializers import ChatTurnSerializer, ResetPasswordSerializer
+from .serializers import ChatTurnSerializer, ResetPasswordSerializer, UserSerializer
 from .utils.api_ai import ask_ai   
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -212,3 +212,10 @@ class ResetPasswordView(APIView):
         return Response({'message': 'Password has been reset successfully!'}, status=status.HTTP_200_OK)
 
 def is_admin(user): return user.is_authenticated and user.is_superuser
+
+class UserProfileView(generics.RetrieveUpdateAPIView):
+    serializer_class = UserSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user

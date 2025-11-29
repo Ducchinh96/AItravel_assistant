@@ -1,6 +1,6 @@
 
-from app.models import ChatTurn
-from .serializers import ChatTurnSerializer, ResetPasswordSerializer
+from app.models import ChatTurn,Itinerary
+from .serializers import ChatTurnSerializer, ResetPasswordSerializer,ItinerarySerializer
 from .utils.api_ai import ask_ai   
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -10,6 +10,7 @@ from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.http import HttpResponse, JsonResponse
 from rest_framework import generics, status, permissions
+from .permission import IsOwnerOrReadOnly
 from rest_framework.decorators import api_view
 import random
 import os
@@ -212,3 +213,8 @@ class ResetPasswordView(APIView):
         return Response({'message': 'Password has been reset successfully!'}, status=status.HTTP_200_OK)
 
 def is_admin(user): return user.is_authenticated and user.is_superuser
+
+class ItineraryDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Itinerary.objects.all()
+    serializer_class = ItinerarySerializer
+    permission_classes = [IsOwnerOrReadOnly]

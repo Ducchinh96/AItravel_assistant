@@ -15,5 +15,7 @@ urlpatterns = [
     path('api/logout/', LogoutView.as_view(), name='logout'),
     #Quên mật khẩu
     path('api/forgot-password/', ForgotPasswordView.as_view(), name='forgot_password'),
-    path('api/reset-password/',ResetPasswordView.as_view(), name='reset-password')
+    path('api/reset-password/',ResetPasswordView.as_view(), name='reset-password'),
+    #edit lich trinh
+    path('api/itineraries/<int:pk>/', views.ItineraryDetailView.as_view(), name='itinerary-detail')
 ]

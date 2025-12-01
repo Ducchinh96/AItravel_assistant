@@ -15,5 +15,8 @@ urlpatterns = [
     path('api/logout/', LogoutView.as_view(), name='logout'),
     #Quên mật khẩu
     path('api/forgot-password/', ForgotPasswordView.as_view(), name='forgot_password'),
-    path('api/reset-password/',ResetPasswordView.as_view(), name='reset-password')
+    path('api/reset-password/',ResetPasswordView.as_view(), name='reset-password'),
+    #quản lý địa điểm du lịch
+    path('api/destinations/', views.DestinationListCreateView.as_view(), name='destination-list-create'),
+    path('api/destinations/<int:pk>/', views.DestinationDetailView.as_view(), name='destination-detail')
 ]

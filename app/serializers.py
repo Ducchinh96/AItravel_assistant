@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import ChatTurn
+from .models import ChatTurn,Destination
 # serializers.py
 from rest_framework import serializers
 from rest_framework.serializers import Serializer, CharField
@@ -18,3 +18,9 @@ class ResetPasswordSerializer(Serializer):
     email = CharField(required=True)
     confirmation_code = CharField(required=True)
     new_password = CharField(required=True)
+    
+class DestinationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Destination
+        fields = ['id', 'name', 'description', 'location', 'latitude', 'longitude', 'image_url', 'created_at']
+        read_only_fields = ['id', 'created_at']

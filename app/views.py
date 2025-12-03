@@ -1,6 +1,6 @@
 
-from app.models import ChatTurn, Itinerary
-from .serializers import ChatTurnSerializer, ResetPasswordSerializer, ItinerarySerializer
+from app.models import ChatTurn, Itinerary, Destination
+from .serializers import ChatTurnSerializer, ResetPasswordSerializer, ItinerarySerializer,DestinationSerializer
 from .utils.api_ai import ask_ai   
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -251,3 +251,22 @@ class ItineraryDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Itinerary.objects.all()
     serializer_class = ItinerarySerializer
     permission_classes = [IsOwnerOrReadOnly]
+class DestinationListCreateView(generics.ListCreateAPIView):
+    queryset = Destination.objects.all()
+    serializer_class = DestinationSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [permissions.IsAdminUser()]
+        return [permissions.AllowAny()]
+
+class DestinationDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Destination.objects.all()
+    serializer_class = DestinationSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_permissions(self):
+        if self.request.method in ['PUT', 'PATCH', 'DELETE']:
+            return [permissions.IsAdminUser()]
+        return [permissions.AllowAny()]

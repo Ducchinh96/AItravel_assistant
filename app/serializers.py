@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import ChatTurn, Itinerary # serializers.py
+from .models import ChatTurn, Itinerary,Destination
 from rest_framework import serializers
 from rest_framework.serializers import Serializer, CharField
 
@@ -28,4 +28,9 @@ class ItinerarySerializer(serializers.ModelSerializer):
     class Meta:
         model = Itinerary
         fields = ['id', 'user', 'title', 'details', 'is_fixed', 'is_public', 'created_at']
+    
+class DestinationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Destination
+        fields = ['id', 'name', 'description', 'location', 'latitude', 'longitude', 'image_url', 'created_at']
         read_only_fields = ['id', 'created_at']

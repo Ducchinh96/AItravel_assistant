@@ -1,6 +1,6 @@
 
 from app.models import ChatTurn, Itinerary, Destination
-from .serializers import ChatTurnSerializer, ResetPasswordSerializer, ItinerarySerializer,DestinationSerializer,UserSerializer
+from .serializers import ChatTurnSerializer, ResetPasswordSerializer, ItinerarySerializer,DestinationSerializer,UserSerializer,AdminUserSerializer
 from .utils.api_ai import ask_ai   
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -276,3 +276,71 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
 
     def get_object(self):
         return self.request.user
+    
+
+class AdminUserListView(generics.ListAPIView):
+    queryset = User.objects.all().order_by('-date_joined')
+    serializer_class = AdminUserSerializer
+    permission_classes = [permissions.IsAdminUser]
+
+class AdminUserDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = User.objects.all()
+    serializer_class = AdminUserSerializer
+    permission_classes = [permissions.IsAdminUser]
+
+class AdminStatisticsView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        now = timezone.now()
+        last_30_days = now - timedelta(days=30)
+        last_7_days = now - timedelta(days=7)
+
+        # Total counts
+        total_users = User.objects.count()
+        total_itineraries = Itinerary.objects.count()
+        total_destinations = Destination.objects.count()
+
+        # User breakdown
+        active_users = User.objects.filter(is_active=True).count()
+        inactive_users = User.objects.filter(is_active=False).count()
+        admin_users = User.objects.filter(is_superuser=True).count()
+
+        # Recent activity - last 30 days
+        new_users_30d = User.objects.filter(date_joined__gte=last_30_days).count()
+        new_itineraries_30d = Itinerary.objects.filter(created_at__gte=last_30_days).count()
+        new_destinations_30d = Destination.objects.filter(created_at__gte=last_30_days).count()
+
+        # Recent activity - last 7 days
+        new_users_7d = User.objects.filter(date_joined__gte=last_7_days).count()
+        new_itineraries_7d = Itinerary.objects.filter(created_at__gte=last_7_days).count()
+
+        statistics = {
+            "total_counts": {
+                "users": total_users,
+                "itineraries": total_itineraries,
+                "destinations": total_destinations
+            },
+            "user_breakdown": {
+                "active_users": active_users,
+                "inactive_users": inactive_users,
+                "admin_users": admin_users
+            },
+            "last_30_days": {
+                "new_users": new_users_30d,
+                "new_itineraries": new_itineraries_30d,
+                "new_destinations": new_destinations_30d
+            },
+            "last_7_days": {
+                "new_users": new_users_7d,
+                "new_itineraries": new_itineraries_7d
+            }
+        }
+
+        return Response({
+            "ok": True,
+            "statistics": statistics
+        }, status=200)

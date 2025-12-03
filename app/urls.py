@@ -26,6 +26,10 @@ urlpatterns = [
     #quản lý địa điểm du lịch
     path('api/destinations/', views.DestinationListCreateView.as_view(), name='destination-list-create'),
     path('api/destinations/<int:pk>/', views.DestinationDetailView.as_view(), name='destination-detail'),
+    #admin
+    path('api/admin/users/', views.AdminUserListView.as_view(), name='admin-user-list'),
+    path('api/admin/users/<int:pk>/', views.AdminUserDetailView.as_view(), name='admin-user-detail'),
+    path('api/admin/statistics/', views.AdminStatisticsView.as_view(), name='admin-statistics'),
     #Edit Profile
     path('api/profile/', views.UserProfileView.as_view(), name='user-profile')
 

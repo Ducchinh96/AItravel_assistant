@@ -22,7 +22,7 @@ urlpatterns = [
     path('api/itineraries/public/', views.PublicItineraryListView.as_view(), name='public-itinerary-list'),
 
     #edit lich trinh
-    path('api/itineraries/<int:pk>/', views.ItineraryDetailView.as_view(), name='itinerary-detail')
+    path('api/itineraries/<int:pk>/', views.ItineraryDetailView.as_view(), name='itinerary-detail'),
     #quản lý địa điểm du lịch
     path('api/destinations/', views.DestinationListCreateView.as_view(), name='destination-list-create'),
     path('api/destinations/<int:pk>/', views.DestinationDetailView.as_view(), name='destination-detail')

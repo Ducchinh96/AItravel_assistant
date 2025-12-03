@@ -21,4 +21,6 @@ urlpatterns = [
     path('api/itineraries/', views.ItineraryListCreateView.as_view(), name='itinerary-list-create'),
     path('api/itineraries/public/', views.PublicItineraryListView.as_view(), name='public-itinerary-list'),
 
+    #edit lich trinh
+    path('api/itineraries/<int:pk>/', views.ItineraryDetailView.as_view(), name='itinerary-detail')
 ]

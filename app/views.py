@@ -1,6 +1,6 @@
 
-from app.models import ChatTurn, Itinerary
-from .serializers import ChatTurnSerializer, ItinerarySerializer, ResetPasswordSerializer
+from app.models import ChatTurn
+from .serializers import ChatTurnSerializer, ResetPasswordSerializer
 from .utils.api_ai import ask_ai   
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -10,6 +10,7 @@ from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.http import HttpResponse, JsonResponse
 from rest_framework import generics, status, permissions
+from .permission import IsOwnerOrReadOnly
 from rest_framework.decorators import api_view
 import random
 import os
@@ -245,3 +246,8 @@ class PublicItineraryListView(generics.ListAPIView):
     def get_queryset(self):
         # Only show public itineraries, ordered by newest first
         return Itinerary.objects.filter(is_public=True).order_by('-created_at')
+
+class ItineraryDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Itinerary.objects.all()
+    serializer_class = ItinerarySerializer
+    permission_classes = [IsOwnerOrReadOnly]

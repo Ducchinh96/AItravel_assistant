@@ -3,6 +3,10 @@ from .models import ChatTurn, Itinerary # serializers.py
 from rest_framework import serializers
 from rest_framework.serializers import Serializer, CharField
 
+from .models import ChatTurn, Itinerary
+#serializers.py
+from rest_framework import serializers
+from rest_framework.serializers import Serializer, CharField 
 class ChatTurnSerializer(serializers.ModelSerializer):
     class Meta:
         model = ChatTurn
@@ -18,6 +22,7 @@ class ResetPasswordSerializer(Serializer):
     email = CharField(required=True)
     confirmation_code = CharField(required=True)
     new_password = CharField(required=True)
+
 
 class ItinerarySerializer(serializers.ModelSerializer):
     class Meta:

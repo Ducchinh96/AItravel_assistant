@@ -1,6 +1,6 @@
 
 from app.models import ChatTurn, Itinerary, Destination
-from .serializers import ChatTurnSerializer, ResetPasswordSerializer, ItinerarySerializer,DestinationSerializer
+from .serializers import ChatTurnSerializer, ResetPasswordSerializer, ItinerarySerializer,DestinationSerializer,UserSerializer
 from .utils.api_ai import ask_ai   
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -270,3 +270,9 @@ class DestinationDetailView(generics.RetrieveUpdateDestroyAPIView):
         if self.request.method in ['PUT', 'PATCH', 'DELETE']:
             return [permissions.IsAdminUser()]
         return [permissions.AllowAny()]
+class UserProfileView(generics.RetrieveUpdateAPIView):
+    serializer_class = UserSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user

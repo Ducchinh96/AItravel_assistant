@@ -2,6 +2,7 @@ from rest_framework import serializers
 from .models import ChatTurn, Itinerary,Destination
 from rest_framework import serializers
 from rest_framework.serializers import Serializer, CharField
+from django.contrib.auth.models import User
 
 from .models import ChatTurn, Itinerary
 #serializers.py
@@ -34,3 +35,11 @@ class DestinationSerializer(serializers.ModelSerializer):
         model = Destination
         fields = ['id', 'name', 'description', 'location', 'latitude', 'longitude', 'image_url', 'created_at']
         read_only_fields = ['id', 'created_at']
+    
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'first_name', 'last_name']
+        read_only_fields = ['id', 'username']
+
+       

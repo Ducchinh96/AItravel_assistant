@@ -1,6 +1,6 @@
 
-from app.models import ChatTurn
-from .serializers import ChatTurnSerializer, ResetPasswordSerializer
+from app.models import ChatTurn, Itinerary
+from .serializers import ChatTurnSerializer, ResetPasswordSerializer, ItinerarySerializer
 from .utils.api_ai import ask_ai   
 from rest_framework.views import APIView
 from rest_framework.response import Response

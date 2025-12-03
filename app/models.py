@@ -27,13 +27,4 @@ class Itinerary(models.Model):
         return self.title
 
 
-class Itinerary(models.Model):
-    user = models.ForeignKey('auth.User', on_delete=models.CASCADE, null=True, blank=True)
-    title = models.CharField(max_length=255)
-    details = models.JSONField()
-    is_fixed = models.BooleanField(default=False)
-    is_public = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
 
-    def __str__(self):
-        return self.title

@@ -11,99 +11,119 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 from pathlib import Path
-from os import path
 import os
+from datetime import timedelta
+from dotenv import load_dotenv
+
+load_dotenv()
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
+# ===========================
+# BASIC SETTINGS
+# ===========================
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-i^b1(h79#a5&%h7^zg$=h6_189%%)2r@$+32kvs1&i8r*fc*qm'
+SECRET_KEY = "django-insecure-i^b1(h79#a5&%h7^zg$=h6_189%%)2r@$+32kvs1&i8r*fc*qm"
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+
+#: tăng giới hạn upload (nếu bạn cần upload file lớn)
+DATA_UPLOAD_MAX_MEMORY_SIZE = 100 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 100 * 1024 * 1024
+
+
+# ===========================
+# CORS
+# ===========================
+
+# Dev cho nhanh: cho phép tất cả origin
+CORS_ALLOW_ALL_ORIGINS = True
+
+# Nếu sau này muốn giới hạn FE cụ thể, bỏ CORS_ALLOW_ALL_ORIGINS và dùng list này:
 CORS_ALLOWED_ORIGINS = [
-    'http://localhost:8080',  # URL của React FE
+    "http://localhost:3000",
+    "http://localhost:8080",
 ]
-# settings.py
-# Cài đặt CORS
-# settings.py
 
-import os
 
-# Đường dẫn đến thư mục lưu trữ tệp media (local storage)
-import os
+# ===========================
+# MEDIA
+# ===========================
 
-# Cấu hình MEDIA_ROOT để Django có thể truy cập đúng thư mục chứa tệp media
-MEDIA_URL = '/media/'  # URL để truy cập các tệp media từ frontend
+MEDIA_URL = "/media/"
 
-# Đảm bảo MEDIA_ROOT trỏ đến đúng thư mục 'media' trong app của bạn
-MEDIA_ROOT = os.path.join(BASE_DIR, 'app', 'media')
+MEDIA_ROOT = os.path.join(BASE_DIR, "app", "media")
+# MEDIA_ROOT = os.path.join(BASE_DIR, "app", "media")
 
-# Application definition
 
+# ===========================
+# APPLICATION DEFINITION
+# ===========================
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    
-    'rest_framework',  # Cài đặt Django REST framework
-    'rest_framework.authtoken',
+    # Django core
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
 
-    'app',
-    'corsheaders',
-    'rest_framework_simplejwt.token_blacklist',
+    # Third-party
+    "rest_framework",
+    "rest_framework.authtoken",
+    "corsheaders",
+    "rest_framework_simplejwt.token_blacklist",
 
-
+    # Local app
+    "app",
 ]
 
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    
-    'corsheaders.middleware.CorsMiddleware',
-]
-CORS_ORIGIN_ALLOW_ALL = True  # Or specify origins if you want to restrict
+    "django.middleware.security.SecurityMiddleware",
 
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:3000',  # URL của React FE
+    # Nên đặt CORS middleware sớm
+    "corsheaders.middleware.CorsMiddleware",
+
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
-ROOT_URLCONF = 'app.urls'
+
+ROOT_URLCONF = "travles.urls"
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],  # nếu có templates chung thì add vào đây
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+"django.contrib.messages.context_processors.messages",
             ],
         },
     },
 ]
 
+WSGI_APPLICATION = "travles.wsgi.application"
 
-WSGI_APPLICATION = 'travles.wsgi.application'
-# Database
-# https://docs.djangoproject.com/en/5.1/ref/settings/#databases
+
+# ===========================
+# DATABASE
+# ===========================
+
 
 DATABASES = {
     'default': {
@@ -117,58 +137,77 @@ DATABASES = {
 }
 
 
-# Password validation
-# https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
+# ===========================
+# PASSWORD VALIDATION
+# ===========================
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
 
 
-# Internationalization
-# https://docs.djangoproject.com/en/5.1/topics/i18n/
+# ===========================
+# INTERNATIONALIZATION
+# ===========================
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = "UTC"  # hoặc "Asia/Ho_Chi_Minh" nếu muốn
 
 USE_I18N = True
-
 USE_TZ = True
 
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/5.1/howto/static-files/
+# ===========================
+# STATIC & MEDIA
+# ===========================
 
-STATIC_URL = 'static/'
+STATIC_URL = "static/"
 
-# Default primary key field type
-# https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
+# Static root (dùng khi collectstatic lúc deploy, dev thì không bắt buộc)
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-from dotenv import load_dotenv
-load_dotenv()
 
-from datetime import timedelta
-SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),  # Thời gian sống của access token
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),  # Thời gian sống của refresh token
-    'ROTATE_REFRESH_TOKENS': True,  # Tùy chọn quay lại refresh token sau mỗi yêu cầu
-    'BLACKLIST_AFTER_ROTATION': True,  # Xóa refresh token cũ sau khi quay lại
-    'UPDATE_LAST_LOGIN': True,  # Cập nhật thời gian đăng nhập cuối cùng
+# ===========================
+# DEFAULT PRIMARY KEY FIELD TYPE
+# ===========================
+
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+
+# ===========================
+# DRF & JWT
+# ===========================
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ),
 }
 
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "UPDATE_LAST_LOGIN": True,
+}
+
+
+# ===========================
+# EMAIL
+# ===========================
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'  
 EMAIL_PORT = 587

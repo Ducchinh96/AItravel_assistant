@@ -110,31 +110,6 @@ Travles is a Django-based travel assistant application that provides AI-powered 
    - API endpoints: http://127.0.0.1:8000/
    - Admin panel: http://127.0.0.1:8000/admin/
 
-## Usage
-
-After starting the server, you can test the API endpoints using tools like Postman or curl:
-
-1. **Get travel suggestions**
-   ```bash
-   curl -X POST http://127.0.0.1:8000/api/suggest-trip/ \
-        -H "Content-Type: application/json" \
-        -d '{"text_user": "I want to visit Da Lat"}'
-   ```
-
-2. **User registration**
-   ```bash
-   curl -X POST http://127.0.0.1:8000/api/register/ \
-        -H "Content-Type: application/json" \
-        -d '{"email": "user@example.com", "password": "password123", "confirm_password": "password123", "first_name": "John", "last_name": "Doe"}'
-   ```
-
-3. **User login**
-   ```bash
-   curl -X POST http://127.0.0.1:8000/api/login/ \
-        -H "Content-Type: application/json" \
-        -d '{"email": "user@example.com", "password": "password123"}'
-   ```
-
 ## Dependencies
 
 See `requirements.txt` for a complete list of dependencies:

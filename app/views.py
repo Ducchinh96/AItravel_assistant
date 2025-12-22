@@ -1,104 +1,356 @@
+from app.models import (
+    ChatTurn,
+    Itinerary,
+    Destination,
+    ItineraryDestination,
+    Hotel,
+    Service,
+    WeatherInfo,
+)
 
-from app.models import ChatTurn, Itinerary, Destination
-from .serializers import ChatTurnSerializer, ResetPasswordSerializer, ItinerarySerializer,DestinationSerializer,UserSerializer,AdminUserSerializer
-from .utils.api_ai import ask_ai   
+from .serializers import (
+    ChatTurnSerializer,
+    ItinerarySerializer,
+    UserSerializer,
+    DestinationSerializer,
+    AdminUserSerializer,
+    ResetPasswordSerializer,
+    HotelSerializer,
+    ServiceSerializer,
+    WeatherInfoSerializer,
+)
+
+from .utils.api_ai import ask_ai
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
+from rest_framework import generics, status, permissions
+
 from django.shortcuts import get_object_or_404
 from django.conf import settings
-from django.shortcuts import get_object_or_404
-from django.http import HttpResponse, JsonResponse
-from rest_framework import generics, status, permissions
-from .permission import IsOwnerOrReadOnly
-from rest_framework.decorators import api_view
-import random
-import os
-import string
-from rest_framework.views import APIView
-from rest_framework.response import Response
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.core.mail import send_mail
 from django.core.cache import cache
 
+from .permissions import IsOwnerOrReadOnly
 
+import random
+import string
+import json
+
+
+# ========= HELPER: Parse JSON AI trả về an toàn =========
+def parse_ai_itinerary_json(ai_text: str):
+    """
+    Thử parse JSON từ chuỗi AI trả về.
+    - Ưu tiên json.loads toàn bộ chuỗi.
+    - Nếu fail, thử cắt từ '{' đầu tới '}' cuối rồi parse.
+    - Nếu vẫn fail thì trả None.
+    """
+    if not ai_text:
+        return None
+
+    # Thử parse trực tiếp
+    try:
+        return json.loads(ai_text)
+    except json.JSONDecodeError:
+        pass
+
+    # Thử cắt từ { ... } nếu AI lỡ thêm text linh tinh
+    first = ai_text.find("{")
+    last = ai_text.rfind("}")
+    if first != -1 and last != -1 and last > first:
+        candidate = ai_text[first:last + 1]
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            return None
+
+    return None
+
+
+# ========= HELPER: Map schedule -> ItineraryDestination (theo model mới) =========
+def sync_itinerary_destinations_from_ai(itinerary: Itinerary, ai_data: dict):
+    """
+    Dựa trên JSON AI, tạo các bản ghi ItineraryDestination để fit với bảng Destination
+    và ItineraryDestination mới.
+
+    Kỳ vọng format "schedule" kiểu:
+
+    "schedule": [
+      {
+        "day_number": 1,
+        "morning": [
+          {
+            "destination_name": "Chợ Đà Lạt",
+            "activity_title": "Tham quan chợ",
+            "activity_description": "Dạo chợ, chụp hình, ăn vặt nhẹ."
+          }
+        ],
+        "afternoon": [ ... ],
+        "evening": [ ... ]
+      },
+      ...
+    ]
+
+    - day_number: nếu thiếu thì fallback sang "day" hoặc index trong list.
+    - Nếu thiếu destination_name thì bỏ qua slot đó.
+    - Destination sẽ được get_or_create theo name (các field khác để trống).
+    """
+    if not isinstance(ai_data, dict):
+        return
+
+    schedule = ai_data.get("schedule") or []
+    if not isinstance(schedule, list):
+        return
+
+    for idx_day, day_block in enumerate(schedule, start=1):
+        if not isinstance(day_block, dict):
+            continue
+
+        day_number = day_block.get("day_number") or day_block.get("day") or idx_day
+
+        for part_of_day in ["morning", "afternoon", "evening", "full_day"]:
+            activities = day_block.get(part_of_day) or []
+            if not isinstance(activities, list):
+                continue
+
+            for index, item in enumerate(activities, start=1):
+                if not isinstance(item, dict):
+                    continue
+
+                dest_name = (item.get("destination_name") or item.get("destination") or "").strip()
+                if not dest_name:
+                    continue
+
+                # tìm hoặc tạo Destination theo tên
+                dest, _ = Destination.objects.get_or_create(
+                    name=dest_name,
+                    defaults={
+                        "short_description": "",
+                        "location": "",
+                        "latitude": None,
+                        "longitude": None,
+                        "image_url": None,
+                    },
+                )
+
+                activity_title = (
+                    item.get("activity_title")
+                    or item.get("activity")
+                    or dest_name
+                )
+                activity_description = (
+                    item.get("activity_description")
+                    or item.get("activity")
+                    or ""
+                )
+
+                ItineraryDestination.objects.create(
+                    itinerary=itinerary,
+                    destination=dest,
+                    day_number=day_number,
+                    part_of_day=part_of_day,
+                    activity_title=activity_title,
+                    activity_description=activity_description,
+                    order=index,
+                )
+
+
+# ========== AI GỢI Ý LỊCH TRÌNH ==========
 
 class TravelPromptAPIView(APIView):
     """
     POST /api/suggest-trip/
     Body: { "text_user": "..." }
+
+    Chức năng:
+    - Gửi yêu cầu cho AI để gợi ý một lịch trình du lịch
+    - Lưu ChatTurn
+    - Nếu AI trả JSON hợp lệ & có schedule -> tạo Itinerary + ItineraryDestination
+
+    YÊU CẦU: PHẢI ĐĂNG NHẬP (gắn lịch trình vào user)
     """
-    permission_classes = [AllowAny]
+    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
         text_user = (request.data.get("text_user") or "").strip()
         if not text_user:
             return Response({"ok": False, "error": "Missing field: text_user"}, status=400)
 
-        # USER WRAPPER (tư vấn du lịch đầy đủ + tương tác thân thiện)
+        # PROMPT mới: khớp với model mới (Itinerary + ItineraryDestination)
         user_wrapper = f"""
 Người dùng: "{text_user}"
 
-Mục tiêu:
-- Đóng vai CHUYÊN GIA TƯ VẤN DU LỊCH thân thiện, nói chuyện tự nhiên, ngắn gọn – rõ ràng.
-- Nếu người dùng nêu MỘT ĐỊA ĐIỂM cụ thể, hãy lập tức nêu các ĐIỂM ĐẶC SẮC của nơi đó:
-  • Ăn uống: món đặc sản nên thử + vài khu/quán gợi ý theo từng buổi.
-  • Vui chơi/giải trí: nên đi đâu, trải nghiệm gì (ngày/đêm), mẹo xếp lịch hợp lý.
-  • “Nên đi đâu tiếp theo”: đề xuất 1–2 điểm lân cận để tối ưu di chuyển.
-- Nếu câu hỏi nghiêng về THỜI TIẾT hoặc mảng chuyên biệt:
-  • Trả lời thân thiện như một LỄ TÂN khách sạn (check-in/out, khu vực ở), 
-    một ĐẦU BẾP (đặc sản, quán, khoảng giá), 
-    một NHÀ DỰ BÁO THỜI TIẾT (nhiệt độ, mưa/gió theo mùa, mang gì), 
-    một HƯỚNG DẪN VUI CHƠI (vé, giờ mở cửa, xếp hàng, mẹo tránh đông).
+Vai trò: Bạn là CHUYÊN GIA TƯ VẤN DU LỊCH.
+Nhiệm vụ: Lên lịch trình du lịch chi tiết dựa trên yêu cầu của người dùng
+(từ điểm A đến B, mỗi ngày làm gì, đi đâu, phong cách chuyến đi là gì).
 
+YÊU CẦU OUTPUT QUAN TRỌNG:
+Hãy trả về kết quả dưới dạng JSON hợp lệ (tuyệt đối không kèm markdown ```json hay bất kỳ dẫn nhập nào), theo cấu trúc sau:
 
-1) Khi có một thông tin nào đó thì bạn hãy:
-2) LỊCH TRÌNH THEO NGÀY (sáng/chiều/tối) kèm thời gian di chuyển ước tính giữa các điểm.
-3) KHÁCH SẠN:
-   - 2–3 khu vực nên ở + lý do (gần biển/điểm tham quan/ăn uống…).
-   - 2–3 gợi ý khách sạn theo hạng (tiết kiệm/tầm trung/cao cấp) + khoảng giá/điểm mạnh.
-   - Nếu phân vân, đưa TIÊU CHÍ chọn nhanh (vị trí, mức giá, yên tĩnh vs sôi động).
-4) ẨM THỰC:
-   - Món đặc sản + 2–3 khu/điểm ăn uống phù hợp theo lịch trình (gợi ý từng bữa nếu được).
-5) THỜI TIẾT & RỦI RO MÙA:
-   - Dự báo theo thời điểm đi + vật dụng nên mang + phương án dự phòng khi mưa/xấu trời.
-6) CHI PHÍ ƯỚC TÍNH (mỗi người):
-   - Di chuyển, lưu trú/đêm, ăn/ngày, vé tham quan chính (khoảng giá thực tế).
-7) BƯỚC TIẾP THEO:
-   - Đưa 1–2 câu hỏi gợi mở để tiếp tục tư vấn sâu (vd: “Bạn muốn ở gần biển hay trung tâm?” “Ngân sách phòng/đêm mong muốn?”).
+{{
+  "title": "Tên chuyến đi (ngắn gọn, hấp dẫn)",
+  "summary": "Mô tả tổng quan ngắn gọn về chuyến đi",
+  "total_days": 3,
+  "main_destination_name": "Tên điểm đến chính (ví dụ: Đà Nẵng, Hội An, Đà Lạt)",
+  "travel_style": "Phong cách chuyến đi (ví dụ: nghỉ dưỡng, khám phá, ẩm thực, gia đình...)",
+  "schedule": [
+    {{
+      "day_number": 1,
+      "morning": [
+        {{
+          "destination_name": "Tên địa điểm buổi sáng (vd: Bãi biển Mỹ Khê)",
+          "activity_title": "Tiêu đề hoạt động (vd: Tắm biển, ngắm bình minh)",
+          "activity_description": "Mô tả ngắn hoạt động (vd: Dậy sớm tắm biển, chụp hình, thư giãn...)"
+        }}
+      ],
+      "afternoon": [
+        {{
+          "destination_name": "Tên địa điểm buổi chiều",
+          "activity_title": "Tiêu đề hoạt động buổi chiều",
+          "activity_description": "Mô tả hoạt động buổi chiều"
+        }}
+      ],
+      "evening": [
+        {{
+          "destination_name": "Tên địa điểm buổi tối",
+          "activity_title": "Tiêu đề hoạt động buổi tối",
+          "activity_description": "Mô tả hoạt động buổi tối"
+        }}
+      ]
+    }},
+    {{
+      "day_number": 2,
+      "morning": [ ... ],
+      "afternoon": [ ... ],
+      "evening": [ ... ]
+    }}
+  ],
+  "chat_response": "Lời khuyên/lời chào thân thiện của AI dành cho người dùng (hiển thị trong khung chat)."
+}}
 
-Yêu cầu trình bày:
-- Dùng gạch đầu dòng, súc tích, thực dụng. Nếu có giờ mở cửa/vé thì nêu rõ.
-- Ưu tiên bối cảnh Việt Nam trừ khi người dùng chỉ định nơi khác.
+Lưu ý:
+- total_days phải là SỐ NGUYÊN, tương ứng với số ngày trong schedule (nếu có thể).
+- Nếu người dùng chỉ hỏi chung, KHÔNG cần lập lịch trình:
+  + Hãy để "schedule": [] (mảng rỗng),
+  + Tập trung trả lời trong "chat_response".
+- Tuyệt đối không trả markdown, không dùng ``` bao quanh JSON.
 """
 
-
+        # Gọi AI
         ai_text = (ask_ai(user_wrapper) or "").strip()
 
-        turn = ChatTurn.objects.create(text_user=text_user, text_ai=ai_text)
+        # Lưu ChatTurn (user chắc chắn đã đăng nhập)
+        user = request.user
+        turn = ChatTurn.objects.create(
+            text_user=text_user,
+            text_ai=ai_text,
+            user=user
+        )
+
+        ai_json = parse_ai_itinerary_json(ai_text)
+        itinerary_instance = None
+        itinerary_data = None
+
+        if isinstance(ai_json, dict):
+            schedule = ai_json.get("schedule") or []
+            has_schedule = isinstance(schedule, list) and len(schedule) > 0
+
+            # Tính total_days an toàn
+            total_days = ai_json.get("total_days")
+            if not isinstance(total_days, int) or total_days <= 0:
+                if isinstance(schedule, list) and len(schedule) > 0:
+                    total_days = len(schedule)
+                else:
+                    total_days = 1
+
+            # main_destination: get_or_create theo main_destination_name
+            main_destination = None
+            main_dest_name = (ai_json.get("main_destination_name") or "").strip()
+            if main_dest_name:
+                main_destination, _ = Destination.objects.get_or_create(
+                    name=main_dest_name,
+                    defaults={
+                        "short_description": "",
+                        "location": "",
+                        "latitude": None,
+                        "longitude": None,
+                        "image_url": None,
+                    },
+                )
+
+            try:
+                itinerary_instance = Itinerary.objects.create(
+                    user=user,
+                    base_itinerary=None,
+                    main_destination=main_destination,
+                    title=ai_json.get("title", "Lịch trình gợi ý từ AI"),
+                    summary=ai_json.get("summary", "") or "",
+                    total_days=total_days,
+                    budget_min=None,
+                    budget_max=None,
+                    travel_style=ai_json.get("travel_style", "") or "",
+                    source_type="ai",
+                    status="published",
+                    is_fixed=False,
+                    is_public=False,
+                )
+
+                if has_schedule:
+                    sync_itinerary_destinations_from_ai(itinerary_instance, ai_json)
+
+                itinerary_data = ItinerarySerializer(itinerary_instance).data
+            except Exception:
+                itinerary_instance = None
+                itinerary_data = None
+
+        response_data = {
+            "text_user": text_user,
+            "text_ai": ai_text,
+            "saved_chat_turn": {
+                "id": turn.id,
+                "created_at": turn.created_at.isoformat()
+            }
+        }
+
+        if isinstance(ai_json, dict):
+            response_data["ai_parsed"] = ai_json
+            if "chat_response" in ai_json:
+                response_data["chat_response"] = ai_json.get("chat_response")
+
+        if itinerary_data:
+            response_data["itinerary"] = itinerary_data
 
         return Response({
             "ok": True,
-            "data": {
-                "text_user": text_user,
-                "text_ai": ai_text,
-                "saved_chat_turn": {"id": turn.id, "created_at": turn.created_at.isoformat()}
-            }
+            "data": response_data
         }, status=200)
 
 
 class ChatTurnHistoryAPIView(APIView):
     """
     GET /api/chat-turns/history/<pk>/?limit=20
-    Trả về: các ChatTurn có id <= pk (mặc định lấy 20 bản ghi gần nhất),
+
+    Trả về các ChatTurn của CHÍNH USER hiện tại
+    có id <= pk (mặc định lấy 20 bản ghi gần nhất),
     sắp xếp theo id tăng dần để FE hiển thị đúng thứ tự.
+
+    YÊU CẦU: PHẢI ĐĂNG NHẬP
     """
-    permission_classes = [AllowAny]
+    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, pk: int):
-        get_object_or_404(ChatTurn, pk=pk)  # đảm bảo pk tồn tại
+        user = request.user
+
+        # Đảm bảo pk tồn tại và thuộc về user (hoặc admin thì bỏ qua)
+        if user.is_superuser:
+            get_object_or_404(ChatTurn, pk=pk)
+        else:
+            get_object_or_404(ChatTurn, pk=pk, user=user)
 
         try:
             limit = int(request.query_params.get("limit", 20))
@@ -106,7 +358,11 @@ class ChatTurnHistoryAPIView(APIView):
             limit = 20
         limit = max(1, min(limit, 200))  # giới hạn an toàn
 
-        qs = ChatTurn.objects.filter(id__lte=pk).order_by("-id")[:limit]
+        qs = ChatTurn.objects.all()
+        if not user.is_superuser:
+            qs = qs.filter(user=user)
+
+        qs = qs.filter(id__lte=pk).order_by("-id")[:limit]
         items = list(reversed(qs))  # chuyển lại thứ tự tăng dần
         data = ChatTurnSerializer(items, many=True).data
 
@@ -117,8 +373,12 @@ class ChatTurnHistoryAPIView(APIView):
             "items": data
         }, status=200)
 
-##SingUp
+
+# ========== AUTH ==========
+
 class RegisterView(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, request):
         data = request.data
         username = data.get('email')
@@ -126,20 +386,27 @@ class RegisterView(APIView):
         confirm_password = data.get('confirm_password')
         first_name = data.get('first_name', '')
         last_name = data.get('last_name', '')
+
         if password != confirm_password:
             return Response({'error': 'Passwords do not match!'}, status=status.HTTP_400_BAD_REQUEST)
+
         if User.objects.filter(username=username).exists():
             return Response({'error': 'Email already exists!'}, status=status.HTTP_400_BAD_REQUEST)
+
         user = User.objects.create_user(
             username=username, email=username, password=password,
             first_name=first_name, last_name=last_name
         )
         return Response({'message': 'User registered successfully!'}, status=status.HTTP_201_CREATED)
 
+
 class LoginView(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, request):
         data = request.data
-        email = data.get('email'); password = data.get('password')
+        email = data.get('email')
+        password = data.get('password')
         try:
             user = User.objects.get(email=email)
             auth_user = authenticate(request, username=user.username, password=password)
@@ -149,7 +416,7 @@ class LoginView(APIView):
             refresh = RefreshToken.for_user(auth_user)
             return Response({
                 'access': str(refresh.access_token),
-                'refresh': str(refresh),   # <--- thêm dòng này
+                'refresh': str(refresh),
                 'user': {
                     'id': auth_user.id,
                     'first_name': auth_user.first_name,
@@ -161,7 +428,10 @@ class LoginView(APIView):
         except User.DoesNotExist:
             return Response({'message': 'User with this email does not exist!'}, status=status.HTTP_401_UNAUTHORIZED)
 
+
 class LogoutView(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, request):
         try:
             refresh_token = request.data.get('refresh_token')
@@ -171,15 +441,20 @@ class LogoutView(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+
 class ForgotPasswordView(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, request):
         email = request.data.get('email')
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
             return Response({'error': 'User with this email does not exist!'}, status=status.HTTP_404_NOT_FOUND)
+
         code = ''.join(random.choices(string.ascii_letters + string.digits, k=6))
         cache.set(f"password_reset_code_{email}", code, timeout=600)
+
         try:
             send_mail(
                 subject="Confirmation Code - Bookquest",
@@ -194,47 +469,78 @@ class ForgotPasswordView(APIView):
 
 
 class ResetPasswordView(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, request):
         serializer = ResetPasswordSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
         email = serializer.validated_data['email']
         confirmation_code = serializer.validated_data['confirmation_code']
         new_password = serializer.validated_data['new_password']
+
         cached_code = cache.get(f"password_reset_code_{email}")
         if not cached_code or cached_code != confirmation_code:
             return Response({'error': 'Invalid or expired confirmation code!'}, status=status.HTTP_400_BAD_REQUEST)
+
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
             return Response({'error': 'User with this email does not exist!'}, status=status.HTTP_404_NOT_FOUND)
-        user.set_password(new_password); user.save()
+
+        user.set_password(new_password)
+        user.save()
         cache.delete(f"password_reset_code_{email}")
         return Response({'message': 'Password has been reset successfully!'}, status=status.HTTP_200_OK)
 
-def is_admin(user): return user.is_authenticated and user.is_superuser
 
-#tao lich trinh
+def is_admin(user):
+    return user.is_authenticated and user.is_superuser
+
+
+# ========== ITINERARY & DESTINATION CRUD ==========
+
 class ItineraryListCreateView(generics.ListCreateAPIView):
+    """
+    - GET /api/itineraries/: trả về các lịch trình của CHÍNH USER hiện tại.
+      + Admin thì thấy tất cả.
+    - POST /api/itineraries/: tạo mới, tự gán user = request.user.
+
+    YÊU CẦU: PHẢI ĐĂNG NHẬP
+    """
     serializer_class = ItinerarySerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        queryset = Itinerary.objects.all()
+        qs = Itinerary.objects.all()
+        user = self.request.user
+
+        if not user.is_superuser:
+            qs = qs.filter(user=user)
+
         is_fixed = self.request.query_params.get('is_fixed')
         if is_fixed is not None:
             if is_fixed.lower() in ['true', '1']:
-                queryset = queryset.filter(is_fixed=True)
+                qs = qs.filter(is_fixed=True)
             elif is_fixed.lower() in ['false', '0']:
-                queryset = queryset.filter(is_fixed=False)
-        return queryset
+                qs = qs.filter(is_fixed=False)
+        return qs
 
     def perform_create(self, serializer):
-        # If user is authenticated, assign the user. Otherwise leave it null (or handle as needed)
-        if self.request.user.is_authenticated:
-            serializer.save(user=self.request.user)
-        else:
-            serializer.save()
+        serializer.save(user=self.request.user)
+
+
+class ItineraryDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    - GET: xem chi tiết lịch trình
+    - PUT/PATCH/DELETE: chỉ owner hoặc admin (IsOwnerOrReadOnly)
+    """
+    queryset = Itinerary.objects.all()
+    serializer_class = ItinerarySerializer
+    permission_classes = [IsOwnerOrReadOnly]
+
+
 class PublicItineraryListView(generics.ListAPIView):
     """
     Public Community Feed - List all public itineraries
@@ -247,11 +553,20 @@ class PublicItineraryListView(generics.ListAPIView):
         # Only show public itineraries, ordered by newest first
         return Itinerary.objects.filter(is_public=True).order_by('-created_at')
 
-class ItineraryDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Itinerary.objects.all()
-    serializer_class = ItinerarySerializer
-    permission_classes = [IsOwnerOrReadOnly]
+
+class UserProfileView(generics.RetrieveUpdateAPIView):
+    serializer_class = UserSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
+
+
 class DestinationListCreateView(generics.ListCreateAPIView):
+    """
+    - GET: ai cũng xem được danh sách điểm đến (dữ liệu mẫu)
+    - POST: chỉ admin được phép thêm điểm đến mới
+    """
     queryset = Destination.objects.all()
     serializer_class = DestinationSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -261,7 +576,12 @@ class DestinationListCreateView(generics.ListCreateAPIView):
             return [permissions.IsAdminUser()]
         return [permissions.AllowAny()]
 
+
 class DestinationDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    - GET: ai cũng xem được chi tiết điểm đến
+    - PUT/PATCH/DELETE: chỉ admin
+    """
     queryset = Destination.objects.all()
     serializer_class = DestinationSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -270,23 +590,149 @@ class DestinationDetailView(generics.RetrieveUpdateDestroyAPIView):
         if self.request.method in ['PUT', 'PATCH', 'DELETE']:
             return [permissions.IsAdminUser()]
         return [permissions.AllowAny()]
-class UserProfileView(generics.RetrieveUpdateAPIView):
-    serializer_class = UserSerializer
-    permission_classes = [permissions.IsAuthenticated]
 
-    def get_object(self):
-        return self.request.user
-    
+
+# ========== HOTEL (KHÁCH SẠN) ==========
+
+class HotelListCreateView(generics.ListCreateAPIView):
+    """
+    GET: List khách sạn (có thể filter theo ?destination_id=)
+    POST: Chỉ admin được phép tạo mới
+    """
+    serializer_class = HotelSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        qs = Hotel.objects.select_related("destination").all()
+        destination_id = self.request.query_params.get("destination_id")
+        if destination_id:
+            qs = qs.filter(destination_id=destination_id)
+        return qs
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [permissions.IsAdminUser()]
+        return [permissions.AllowAny()]
+
+
+class HotelDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    GET: Xem chi tiết 1 khách sạn
+    PUT/PATCH/DELETE: Chỉ admin
+    """
+    queryset = Hotel.objects.select_related("destination").all()
+    serializer_class = HotelSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_permissions(self):
+        if self.request.method in ["PUT", "PATCH", "DELETE"]:
+            return [permissions.IsAdminUser()]
+        return [permissions.AllowAny()]
+
+
+# ========== FOODPLACE (ĂN UỐNG) ==========
+
+class ServiceListCreateView(generics.ListCreateAPIView):
+    """
+    GET: List dịch vụ (filter ?destination_id= & ?service_type=)
+    POST: Chỉ admin được phép tạo mới
+    """
+    serializer_class = ServiceSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        qs = Service.objects.select_related("destination").all()
+
+        destination_id = self.request.query_params.get("destination_id")
+        if destination_id:
+            qs = qs.filter(destination_id=destination_id)
+
+        service_type = self.request.query_params.get("service_type")
+        if service_type:
+            qs = qs.filter(service_type=service_type)
+
+        return qs
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [permissions.IsAdminUser()]
+        return [permissions.AllowAny()]
+
+
+class ServiceDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    GET: Xem chi tiết 1 dịch vụ
+    PUT/PATCH/DELETE: Chỉ admin
+    """
+    queryset = Service.objects.select_related("destination").all()
+    serializer_class = ServiceSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_permissions(self):
+        if self.request.method in ["PUT", "PATCH", "DELETE"]:
+            return [permissions.IsAdminUser()]
+        return [permissions.AllowAny()]
+
+
+# ========== WEATHERINFO (THỜI TIẾT) ==========
+
+class WeatherInfoListCreateView(generics.ListCreateAPIView):
+    """
+    GET: List thông tin thời tiết (filter ?destination_id=, ?month=)
+    POST: Chỉ admin được phép tạo/cập nhật dữ liệu thời tiết
+    """
+    serializer_class = WeatherInfoSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        qs = WeatherInfo.objects.select_related("destination").all()
+        destination_id = self.request.query_params.get("destination_id")
+        month = self.request.query_params.get("month")
+
+        if destination_id:
+            qs = qs.filter(destination_id=destination_id)
+        if month:
+            try:
+                month_int = int(month)
+                qs = qs.filter(month=month_int)
+            except ValueError:
+                pass
+        return qs
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [permissions.IsAdminUser()]
+        return [permissions.AllowAny()]
+
+
+class WeatherInfoDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    GET: Xem chi tiết 1 bản ghi thời tiết
+    PUT/PATCH/DELETE: Chỉ admin
+    """
+    queryset = WeatherInfo.objects.select_related("destination").all()
+    serializer_class = WeatherInfoSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_permissions(self):
+        if self.request.method in ["PUT", "PATCH", "DELETE"]:
+            return [permissions.IsAdminUser()]
+        return [permissions.AllowAny()]
+
+
+# ========== ADMIN ==========
 
 class AdminUserListView(generics.ListAPIView):
     queryset = User.objects.all().order_by('-date_joined')
     serializer_class = AdminUserSerializer
     permission_classes = [permissions.IsAdminUser]
 
+
 class AdminUserDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = User.objects.all()
     serializer_class = AdminUserSerializer
     permission_classes = [permissions.IsAdminUser]
+
 
 class AdminStatisticsView(APIView):
     permission_classes = [permissions.IsAdminUser]
@@ -294,7 +740,7 @@ class AdminStatisticsView(APIView):
     def get(self, request):
         from django.utils import timezone
         from datetime import timedelta
-        
+
         now = timezone.now()
         last_30_days = now - timedelta(days=30)
         last_7_days = now - timedelta(days=7)

@@ -1,19 +1,19 @@
 from django.core.management.base import BaseCommand
 from app.models import Destination
 
+
 class Command(BaseCommand):
-    help = 'Seed database with sample destination data'
+    help = 'Seed database với dữ liệu mẫu cho bảng Destination (điểm đến)'
 
     def handle(self, *args, **options):
         # Xóa dữ liệu cũ (nếu có)
         Destination.objects.all().delete()
-        self.stdout.write(self.style.WARNING('Đã xóa dữ liệu cũ.'))
+        self.stdout.write(self.style.WARNING('Đã xóa dữ liệu cũ trong bảng Destination.'))
 
-        # Dữ liệu mẫu 15 địa điểm du lịch Việt Nam
         destinations = [
             {
                 "name": "Vịnh Hạ Long",
-                "description": "Di sản thiên nhiên thế giới với hàng nghìn hòn đảo đá vôi tuyệt đẹp. Hoạt động: Du thuyền qua đêm, chèo kayak, tham quan hang động Sửng Sốt, Thiên Cung.",
+                "short_description": "Di sản thiên nhiên thế giới với hàng nghìn hòn đảo đá vôi tuyệt đẹp. Du thuyền, chèo kayak, tham quan hang động.",
                 "location": "Quảng Ninh",
                 "latitude": 20.9101,
                 "longitude": 107.1839,
@@ -21,7 +21,7 @@ class Command(BaseCommand):
             },
             {
                 "name": "Phố Cổ Hội An",
-                "description": "Thành phố cổ được UNESCO công nhận. Nổi tiếng với đèn lồng, kiến trúc Nhật-Trung hòa quyện. Ẩm thực: Cao lầu, Bánh bao vạc, Cơm gà.",
+                "short_description": "Phố cổ với đèn lồng, kiến trúc Nhật – Trung, ẩm thực như cao lầu, cơm gà, bánh bao vạc.",
                 "location": "Quảng Nam",
                 "latitude": 15.8801,
                 "longitude": 108.3380,
@@ -29,7 +29,7 @@ class Command(BaseCommand):
             },
             {
                 "name": "Đà Lạt - Thành phố Ngàn Hoa",
-                "description": "Thành phố cao nguyên mát mẻ quanh năm. Điểm đến lãng mạn với hồ Xuân Hương, thác Datanla, vườn hoa. Đặc sản: Dâu tây, rau củ cao nguyên.",
+                "short_description": "Thành phố cao nguyên mát mẻ, nhiều hoa, hồ Xuân Hương, thác Datanla, nông trại dâu.",
                 "location": "Lâm Đồng",
                 "latitude": 11.9404,
                 "longitude": 108.4583,
@@ -37,7 +37,7 @@ class Command(BaseCommand):
             },
             {
                 "name": "Phú Quốc - Đảo Ngọc",
-                "description": "Đảo lớn nhất Việt Nam với bãi biển đẹp nhất thế giới. Hoạt động: Lặn ngắm san hô, câu cá, tham quan VinWonders. Đặc sản: Nước mắm, sim rượu.",
+                "short_description": "Đảo biển lớn với bãi biển đẹp, lặn ngắm san hô, VinWonders, đặc sản nước mắm, rượu sim.",
                 "location": "Kiên Giang",
                 "latitude": 10.2899,
                 "longitude": 103.9870,
@@ -45,7 +45,7 @@ class Command(BaseCommand):
             },
             {
                 "name": "Bà Nà Hills",
-                "description": "Khu du lịch nghỉ dưỡng trên núi với Cầu Vàng nổi tiếng thế giới. Cáp treo Guinness, làng Pháp, Fantasy Park. Nhiệt độ mát mẻ quanh năm.",
+                "short_description": "Khu du lịch trên núi với Cầu Vàng, làng Pháp, cáp treo kỷ lục, khí hậu mát mẻ.",
                 "location": "Đà Nẵng",
                 "latitude": 15.9956,
                 "longitude": 107.9968,
@@ -53,7 +53,7 @@ class Command(BaseCommand):
             },
             {
                 "name": "Vườn Quốc Gia Phong Nha - Kẻ Bàng",
-                "description": "Di sản thiên nhiên với hang động lớn nhất thế giới - Sơn Đoòng. Tham quan hang Phong Nha, Thiên Đường bằng thuyền. Cảnh quan kỳ vĩ.",
+                "short_description": "Di sản thiên nhiên với hệ thống hang động đồ sộ như Sơn Đoòng, Phong Nha, Thiên Đường.",
                 "location": "Quảng Bình",
                 "latitude": 17.4810,
                 "longitude": 106.2840,
@@ -61,7 +61,7 @@ class Command(BaseCommand):
             },
             {
                 "name": "Sa Pa - Thị trấn Sương Mù",
-                "description": "Thị trấn miền núi với ruộng bậc thang tuyệt đẹp. Leo đỉnh Fanxipan, tham quan bản Cát Cát, chợ tình. Đặc sản: Thịt trâu gác bếp, cá tầm.",
+                "short_description": "Thị trấn vùng cao với ruộng bậc thang, Fansipan, bản làng dân tộc, khí hậu se lạnh.",
                 "location": "Lào Cai",
                 "latitude": 22.3364,
                 "longitude": 103.8438,
@@ -69,7 +69,7 @@ class Command(BaseCommand):
             },
             {
                 "name": "Nha Trang - Thành phố Biển",
-                "description": "Bãi biển đẹp với nước trong xanh. Hoạt động: Lặn biển, tham quan Vinpearl Land, tắm bùn Tháp Bà. Ẩm thực hải sản phong phú.",
+                "short_description": "Thành phố biển sôi động, nước trong xanh, nhiều hoạt động biển và hải sản phong phú.",
                 "location": "Khánh Hòa",
                 "latitude": 12.2388,
                 "longitude": 109.1967,
@@ -77,7 +77,7 @@ class Command(BaseCommand):
             },
             {
                 "name": "Huế - Cố đô",
-                "description": "Kinh đô cũ với Đại Nội, lăng tẩm vua Nguyễn. Ẩm thực cung đình: Bún bò Huế, Bánh khoái, Cơm hến. Sông Hương thơ mộng.",
+                "short_description": "Cố đô với Đại Nội, lăng tẩm, sông Hương, nhiều món ăn cung đình đặc trưng.",
                 "location": "Thừa Thiên Huế",
                 "latitude": 16.4637,
                 "longitude": 107.5909,
@@ -85,7 +85,7 @@ class Command(BaseCommand):
             },
             {
                 "name": "Mũi Né",
-                "description": "Bãi biển với đồi cát trắng, cát đỏng độc đáo. Hoạt động: Lướt ván diều, ATV, xem bình minh Suối Tiên. Hải sản tươi ngon.",
+                "short_description": "Biển, đồi cát trắng – đỏ, hoạt động thể thao biển, hải sản tươi.",
                 "location": "Bình Thuận",
                 "latitude": 10.9333,
                 "longitude": 108.2833,
@@ -93,7 +93,7 @@ class Command(BaseCommand):
             },
             {
                 "name": "Mai Châu",
-                "description": "Thung lũng xanh mướt với bản làng dân tộc Thái. Trải nghiệm nhà sàn, múa sạp, cơm lam. Đạp xe qua ruộng lúa, leo núi.",
+                "short_description": "Thung lũng yên bình, nhà sàn, ruộng lúa, văn hóa người Thái.",
                 "location": "Hòa Bình",
                 "latitude": 20.6667,
                 "longitude": 105.0000,
@@ -101,7 +101,7 @@ class Command(BaseCommand):
             },
             {
                 "name": "Đảo Cát Bà",
-                "description": "Đảo lớn nhất vịnh Lan Hạ. Vườn Quốc gia với voọc Cát Bà quý hiếm. Hoạt động: Trekking, leo núi, kayak, bơi lội ở bãi Cát Cò.",
+                "short_description": "Đảo lớn vùng vịnh Lan Hạ, có vườn quốc gia, bãi tắm Cát Cò, hoạt động trekking, kayak.",
                 "location": "Hải Phòng",
                 "latitude": 20.7273,
                 "longitude": 107.0454,
@@ -109,7 +109,7 @@ class Command(BaseCommand):
             },
             {
                 "name": "Cù Lao Chàm",
-                "description": "Khu dự trữ sinh quyển thế giới. Lặn ngắm san hô, tham quan làng chài, đạp xe quanh đảo. Hải sản tươi sống giá rẻ.",
+                "short_description": "Cụm đảo gần Hội An, khu dự trữ sinh quyển, nổi tiếng với san hô và làng chài.",
                 "location": "Quảng Nam",
                 "latitude": 15.9500,
                 "longitude": 108.5000,
@@ -117,7 +117,7 @@ class Command(BaseCommand):
             },
             {
                 "name": "Côn Đảo",
-                "description": "Quần đảo hoang sơ với lịch sử anh hùng. Bãi Đầm Trầu - một trong bãi biển đẹp nhất Việt Nam. Lặn biển, ngắm rùa biển đẻ trứng.",
+                "short_description": "Quần đảo hoang sơ, nhiều bãi biển đẹp, lịch sử nhà tù Côn Đảo, nơi rùa biển đẻ trứng.",
                 "location": "Bà Rịa - Vũng Tàu",
                 "latitude": 8.6833,
                 "longitude": 106.6000,
@@ -125,7 +125,7 @@ class Command(BaseCommand):
             },
             {
                 "name": "Cầu Rồng Đà Nẵng",
-                "description": "Biểu tượng thành phố với cầu rồng phun lửa, phun nước vào cuối tuần. Khu vực gần Sông Hàn, phố đi bộ, bãi biển Mỹ Khê.",
+                "short_description": "Biểu tượng Đà Nẵng, cầu rồng phun lửa – nước cuối tuần, gần sông Hàn, biển Mỹ Khê.",
                 "location": "Đà Nẵng",
                 "latitude": 16.0544,
                 "longitude": 108.2272,
@@ -133,7 +133,6 @@ class Command(BaseCommand):
             },
         ]
 
-        # Thêm từng địa điểm vào DB
         created_count = 0
         for dest_data in destinations:
             Destination.objects.create(**dest_data)
@@ -141,5 +140,5 @@ class Command(BaseCommand):
             self.stdout.write(f"✓ Đã tạo: {dest_data['name']}")
 
         self.stdout.write(
-            self.style.SUCCESS(f'\n🎉 Hoàn thành! Đã thêm {created_count} địa điểm du lịch vào database.')
+            self.style.SUCCESS(f'\n🎉 Hoàn thành! Đã thêm {created_count} địa điểm du lịch vào bảng Destination.')
         )

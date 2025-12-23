@@ -3,9 +3,13 @@ from app.models import (
     Itinerary,
     Destination,
     ItineraryDestination,
-    Hotel,
     Service,
     WeatherInfo,
+    ItineraryReview,
+    Airport,
+    FlightSegment,
+    Preference,
+    UserPreference,
 )
 
 from .serializers import (
@@ -15,9 +19,13 @@ from .serializers import (
     DestinationSerializer,
     AdminUserSerializer,
     ResetPasswordSerializer,
-    HotelSerializer,
     ServiceSerializer,
     WeatherInfoSerializer,
+    ItineraryReviewSerializer,
+    AirportSerializer,
+    FlightSegmentSerializer,
+    PreferenceSerializer,
+    UserPreferenceSerializer,
 )
 
 from .utils.api_ai import ask_ai
@@ -596,18 +604,23 @@ class DestinationDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class HotelListCreateView(generics.ListCreateAPIView):
     """
-    GET: List khách sạn (có thể filter theo ?destination_id=)
-    POST: Chỉ admin được phép tạo mới
+    GET: List khach san (filter ?destination_id=)
+    POST: Chi admin duoc phep tao moi
     """
-    serializer_class = HotelSerializer
+    serializer_class = ServiceSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
     def get_queryset(self):
-        qs = Hotel.objects.select_related("destination").all()
+        qs = Service.objects.select_related("destination").filter(
+            service_type=Service.ServiceType.HOTEL
+        )
         destination_id = self.request.query_params.get("destination_id")
         if destination_id:
             qs = qs.filter(destination_id=destination_id)
         return qs
+
+    def perform_create(self, serializer):
+        serializer.save(service_type=Service.ServiceType.HOTEL)
 
     def get_permissions(self):
         if self.request.method == "POST":
@@ -617,20 +630,23 @@ class HotelListCreateView(generics.ListCreateAPIView):
 
 class HotelDetailView(generics.RetrieveUpdateDestroyAPIView):
     """
-    GET: Xem chi tiết 1 khách sạn
-    PUT/PATCH/DELETE: Chỉ admin
+    GET: Xem chi tiet 1 khach san
+    PUT/PATCH/DELETE: Chi admin
     """
-    queryset = Hotel.objects.select_related("destination").all()
-    serializer_class = HotelSerializer
+    queryset = Service.objects.select_related("destination").filter(
+        service_type=Service.ServiceType.HOTEL
+    )
+    serializer_class = ServiceSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def perform_update(self, serializer):
+        serializer.save(service_type=Service.ServiceType.HOTEL)
 
     def get_permissions(self):
         if self.request.method in ["PUT", "PATCH", "DELETE"]:
             return [permissions.IsAdminUser()]
         return [permissions.AllowAny()]
 
-
-# ========== FOODPLACE (ĂN UỐNG) ==========
 
 class ServiceListCreateView(generics.ListCreateAPIView):
     """
@@ -718,6 +734,137 @@ class WeatherInfoDetailView(generics.RetrieveUpdateDestroyAPIView):
         if self.request.method in ["PUT", "PATCH", "DELETE"]:
             return [permissions.IsAdminUser()]
         return [permissions.AllowAny()]
+
+
+# ========== REVIEWS / AIRPORTS / FLIGHTS / PREFERENCES ==========
+
+class ItineraryReviewListCreateView(generics.ListCreateAPIView):
+    serializer_class = ItineraryReviewSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        qs = ItineraryReview.objects.select_related("itinerary", "user").all()
+        itinerary_id = self.request.query_params.get("itinerary_id")
+        if itinerary_id:
+            qs = qs.filter(itinerary_id=itinerary_id)
+        user_id = self.request.query_params.get("user_id")
+        if user_id:
+            qs = qs.filter(user_id=user_id)
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class ItineraryReviewDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = ItineraryReview.objects.select_related("itinerary", "user").all()
+    serializer_class = ItineraryReviewSerializer
+    permission_classes = [IsOwnerOrReadOnly]
+
+
+class AirportListCreateView(generics.ListCreateAPIView):
+    queryset = Airport.objects.all().order_by("code")
+    serializer_class = AirportSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [permissions.IsAdminUser()]
+        return [permissions.AllowAny()]
+
+
+class AirportDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Airport.objects.all()
+    serializer_class = AirportSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_permissions(self):
+        if self.request.method in ["PUT", "PATCH", "DELETE"]:
+            return [permissions.IsAdminUser()]
+        return [permissions.AllowAny()]
+
+
+class FlightSegmentListCreateView(generics.ListCreateAPIView):
+    serializer_class = FlightSegmentSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        qs = FlightSegment.objects.select_related(
+            "origin_airport", "destination_airport"
+        ).all()
+        origin_id = self.request.query_params.get("origin_airport_id")
+        if origin_id:
+            qs = qs.filter(origin_airport_id=origin_id)
+        destination_id = self.request.query_params.get("destination_airport_id")
+        if destination_id:
+            qs = qs.filter(destination_airport_id=destination_id)
+        airline = self.request.query_params.get("airline")
+        if airline:
+            qs = qs.filter(airline__icontains=airline)
+        return qs
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [permissions.IsAdminUser()]
+        return [permissions.AllowAny()]
+
+
+class FlightSegmentDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = FlightSegment.objects.select_related(
+        "origin_airport", "destination_airport"
+    ).all()
+    serializer_class = FlightSegmentSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_permissions(self):
+        if self.request.method in ["PUT", "PATCH", "DELETE"]:
+            return [permissions.IsAdminUser()]
+        return [permissions.AllowAny()]
+
+
+class PreferenceListCreateView(generics.ListCreateAPIView):
+    queryset = Preference.objects.all().order_by("name")
+    serializer_class = PreferenceSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [permissions.IsAdminUser()]
+        return [permissions.AllowAny()]
+
+
+class PreferenceDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Preference.objects.all()
+    serializer_class = PreferenceSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_permissions(self):
+        if self.request.method in ["PUT", "PATCH", "DELETE"]:
+            return [permissions.IsAdminUser()]
+        return [permissions.AllowAny()]
+
+
+class UserPreferenceListCreateView(generics.ListCreateAPIView):
+    serializer_class = UserPreferenceSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return UserPreference.objects.select_related("preference", "user").filter(
+            user=self.request.user
+        )
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class UserPreferenceDetailView(generics.RetrieveDestroyAPIView):
+    serializer_class = UserPreferenceSerializer
+    permission_classes = [IsOwnerOrReadOnly]
+
+    def get_queryset(self):
+        return UserPreference.objects.select_related("preference", "user").filter(
+            user=self.request.user
+        )
 
 
 # ========== ADMIN ==========

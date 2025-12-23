@@ -4,11 +4,15 @@ from django.contrib.auth.models import User
 from .models import (
     ChatTurn,
     Destination,
-    Hotel,
     Service,
     WeatherInfo,
     Itinerary,
     ItineraryDestination,
+    ItineraryReview,
+    Airport,
+    FlightSegment,
+    Preference,
+    UserPreference,
 )
 
 
@@ -42,7 +46,7 @@ class ChangePasswordSerializer(serializers.Serializer):
 
 
 # =========================
-#  ĐIỂM ĐẾN & CÁC THÔNG TIN LIÊN QUAN
+#  DESTINATION & RELATED
 # =========================
 class DestinationSerializer(serializers.ModelSerializer):
     class Meta:
@@ -60,32 +64,6 @@ class DestinationSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at"]
 
 
-class HotelSerializer(serializers.ModelSerializer):
-    # Cho phép FE gửi id điểm đến
-    destination_id = serializers.PrimaryKeyRelatedField(
-        source="destination",
-        queryset=Destination.objects.all(),
-        write_only=True,
-        required=True,
-    )
-    # Đọc ra thông tin điểm đến cơ bản (tùy bạn dùng hay không)
-    destination = DestinationSerializer(read_only=True)
-
-    class Meta:
-        model = Hotel
-        fields = [
-            "id",
-            "destination",
-            "destination_id",
-            "name",
-            "address",
-            "price_range",
-            "image_url",
-            "created_at",
-        ]
-        read_only_fields = ["id", "created_at", "destination"]
-
-
 class ServiceSerializer(serializers.ModelSerializer):
     destination_id = serializers.PrimaryKeyRelatedField(
         source="destination",
@@ -98,16 +76,19 @@ class ServiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Service
         fields = [
-            "id",              # db_column = id_dich_vu
+            "id",
             "destination",
-            "destination_id",  # db_column = diem_den_id
-            "name",            # db_column = ten_dich_vu
-            "service_type",    # db_column = loai_dich_vu
-            "description",     # db_column = mo_ta
-            "address",         # db_column = dia_chi
-            "price_range",     # db_column = gia_tham_khao
-            "image_url",       # db_column = hinh_anh
-            "created_at",      # db_column = ngay_tao
+            "destination_id",
+            "name",
+            "service_type",
+            "description",
+            "address",
+            "price_from",
+            "price_range",
+            "rating_avg",
+            "rating_count",
+            "image_url",
+            "created_at",
         ]
         read_only_fields = ["id", "created_at", "destination"]
 
@@ -134,12 +115,10 @@ class WeatherInfoSerializer(serializers.ModelSerializer):
 
 
 # =========================
-#  LỊCH TRÌNH & CHI TIẾT LỊCH TRÌNH
+#  ITINERARY
 # =========================
 class ItineraryDestinationSerializer(serializers.ModelSerializer):
-    # Đọc: embed thông tin điểm đến cho dễ xem
     destination = DestinationSerializer(read_only=True)
-    # Ghi: gửi id điểm đến
     destination_id = serializers.PrimaryKeyRelatedField(
         source="destination",
         queryset=Destination.objects.all(),
@@ -163,7 +142,6 @@ class ItineraryDestinationSerializer(serializers.ModelSerializer):
 
 
 class ItinerarySerializer(serializers.ModelSerializer):
-    # main_destination: đọc & ghi tách riêng id
     main_destination = DestinationSerializer(read_only=True)
     main_destination_id = serializers.PrimaryKeyRelatedField(
         source="main_destination",
@@ -173,14 +151,12 @@ class ItinerarySerializer(serializers.ModelSerializer):
         allow_null=True,
     )
 
-    # base_itinerary: chỉ cần id cho clone từ lịch trình mẫu
     base_itinerary = serializers.PrimaryKeyRelatedField(
         queryset=Itinerary.objects.all(),
         required=False,
         allow_null=True,
     )
 
-    # Danh sách chi tiết điểm đến theo ngày/buổi (read-only)
     destinations_detail = ItineraryDestinationSerializer(
         source="itinerary_destinations",
         many=True,
@@ -234,3 +210,85 @@ class AdminUserSerializer(serializers.ModelSerializer):
             "last_login",
         ]
         read_only_fields = ["id", "username", "date_joined", "last_login"]
+
+
+# =========================
+#  REVIEWS / AIRPORT / FLIGHTS / PREFERENCES
+# =========================
+class ItineraryReviewSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+
+    class Meta:
+        model = ItineraryReview
+        fields = [
+            "id",
+            "itinerary",
+            "user",
+            "rating",
+            "comment",
+            "created_at",
+        ]
+        read_only_fields = ["id", "user", "created_at"]
+
+
+class AirportSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Airport
+        fields = ["id", "code", "name", "city", "country"]
+        read_only_fields = ["id"]
+
+
+class FlightSegmentSerializer(serializers.ModelSerializer):
+    origin_airport_id = serializers.PrimaryKeyRelatedField(
+        source="origin_airport",
+        queryset=Airport.objects.all(),
+        write_only=True,
+        required=True,
+    )
+    destination_airport_id = serializers.PrimaryKeyRelatedField(
+        source="destination_airport",
+        queryset=Airport.objects.all(),
+        write_only=True,
+        required=True,
+    )
+    origin_airport = AirportSerializer(read_only=True)
+    destination_airport = AirportSerializer(read_only=True)
+
+    class Meta:
+        model = FlightSegment
+        fields = [
+            "id",
+            "origin_airport",
+            "origin_airport_id",
+            "destination_airport",
+            "destination_airport_id",
+            "airline",
+            "flight_number",
+            "departure_time",
+            "arrival_time",
+            "price",
+        ]
+        read_only_fields = ["id", "origin_airport", "destination_airport"]
+
+
+class PreferenceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Preference
+        fields = ["id", "name"]
+        read_only_fields = ["id"]
+
+
+class UserPreferenceSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+    preference = PreferenceSerializer(read_only=True)
+    preference_id = serializers.PrimaryKeyRelatedField(
+        source="preference",
+        queryset=Preference.objects.all(),
+        write_only=True,
+        required=True,
+    )
+
+    class Meta:
+        model = UserPreference
+        fields = ["id", "user", "preference", "preference_id"]
+        read_only_fields = ["id", "user", "preference"]

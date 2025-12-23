@@ -394,7 +394,7 @@ class ItineraryReview(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, db_column="ngay_tao")
 
     class Meta:
-        db_table = "danhgia_lichtrinh"
+        db_table = "danhgia"
         ordering = ["-created_at"]
         constraints = [
             models.UniqueConstraint(

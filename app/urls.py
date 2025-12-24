@@ -6,8 +6,6 @@ from .views import (
     RegisterView,
     LoginView,
     LogoutView,
-    HotelListCreateView,
-    HotelDetailView,
     ServiceListCreateView,
     ServiceDetailView,
     WeatherInfoListCreateView,
@@ -43,9 +41,6 @@ urlpatterns = [
 
     path('api/destinations/', views.DestinationListCreateView.as_view(), name='destination-list-create'),
     path('api/destinations/<int:pk>/', views.DestinationDetailView.as_view(), name='destination-detail'),
-
-    path('api/hotels/', HotelListCreateView.as_view(), name='hotel-list-create'),
-    path('api/hotels/<int:pk>/', HotelDetailView.as_view(), name='hotel-detail'),
 
     path('api/services/', ServiceListCreateView.as_view(), name='service-list-create'),
     path('api/services/<int:pk>/', ServiceDetailView.as_view(), name='service-detail'),

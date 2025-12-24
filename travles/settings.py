@@ -28,7 +28,7 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 CORS_ALLOWED_ORIGINS = [
-    'http://localhost:8080',  # URL của React FE
+    'http://localhost:8080', 'http://127.0.0.1:3003',"http://localhost:3003"  # URL của React FE
 ]
 # settings.py
 # Cài đặt CORS

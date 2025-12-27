@@ -3,6 +3,7 @@ from django.contrib.auth.models import User
 
 from .models import (
     ChatTurn,
+    AIItineraryDraft,
     Destination,
     Service,
     WeatherInfo,
@@ -24,6 +25,29 @@ class ChatTurnSerializer(serializers.ModelSerializer):
         model = ChatTurn
         fields = ["id", "text_user", "text_ai", "created_at"]
         read_only_fields = ["id", "created_at"]
+
+
+class AIItineraryDraftSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AIItineraryDraft
+        fields = [
+            "id",
+            "user",
+            "text_user",
+            "ai_raw",
+            "ai_parsed",
+            "status",
+            "accepted_itinerary",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "user",
+            "created_at",
+            "updated_at",
+            "accepted_itinerary",
+        ]
 
 
 class UserSerializer(serializers.ModelSerializer):

@@ -1,5 +1,6 @@
 from app.models import (
     ChatTurn,
+    AIItineraryDraft,
     Itinerary,
     Destination,
     ItineraryDestination,
@@ -14,6 +15,7 @@ from app.models import (
 
 from .serializers import (
     ChatTurnSerializer,
+    AIItineraryDraftSerializer,
     ItinerarySerializer,
     UserSerializer,
     DestinationSerializer,
@@ -48,6 +50,8 @@ from .permissions import IsOwnerOrReadOnly
 import random
 import string
 import json
+from string import Template
+from textwrap import dedent
 
 
 # ========= HELPER: Parse JSON AI trả về an toàn =========
@@ -168,20 +172,61 @@ def sync_itinerary_destinations_from_ai(itinerary: Itinerary, ai_data: dict):
                 )
 
 
+
+# ========= HELPER: Create Itinerary from AI JSON =========
+def create_itinerary_from_ai(user, ai_json: dict):
+    if not isinstance(ai_json, dict):
+        raise ValueError("Invalid AI JSON")
+
+    schedule = ai_json.get("schedule") or []
+    has_schedule = isinstance(schedule, list) and len(schedule) > 0
+
+    total_days = ai_json.get("total_days")
+    if not isinstance(total_days, int) or total_days <= 0:
+        if has_schedule:
+            total_days = len(schedule)
+        else:
+            total_days = 1
+
+    main_destination = None
+    main_dest_name = (ai_json.get("main_destination_name") or "").strip()
+    if main_dest_name:
+        main_destination, _ = Destination.objects.get_or_create(
+            name=main_dest_name,
+            defaults={
+                "short_description": "",
+                "location": "",
+                "latitude": None,
+                "longitude": None,
+                "image_url": None,
+            },
+        )
+
+    itinerary_instance = Itinerary.objects.create(
+        user=user,
+        base_itinerary=None,
+        main_destination=main_destination,
+        title=ai_json.get("title", "AI itinerary"),
+        summary=ai_json.get("summary", "") or "",
+        total_days=total_days,
+        budget_min=None,
+        budget_max=None,
+        travel_style=ai_json.get("travel_style", "") or "",
+        source_type="ai",
+        status="published",
+        is_fixed=False,
+        is_public=False,
+    )
+
+    if has_schedule:
+        sync_itinerary_destinations_from_ai(itinerary_instance, ai_json)
+
+    return itinerary_instance
+
+
 # ========== AI GỢI Ý LỊCH TRÌNH ==========
 
 class TravelPromptAPIView(APIView):
-    """
-    POST /api/suggest-trip/
-    Body: { "text_user": "..." }
-
-    Chức năng:
-    - Gửi yêu cầu cho AI để gợi ý một lịch trình du lịch
-    - Lưu ChatTurn
-    - Nếu AI trả JSON hợp lệ & có schedule -> tạo Itinerary + ItineraryDestination
-
-    YÊU CẦU: PHẢI ĐĂNG NHẬP (gắn lịch trình vào user)
-    """
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
@@ -190,66 +235,82 @@ class TravelPromptAPIView(APIView):
             return Response({"ok": False, "error": "Missing field: text_user"}, status=400)
 
         # PROMPT mới: khớp với model mới (Itinerary + ItineraryDestination)
-        user_wrapper = f"""
-Người dùng: "{text_user}"
+        # Prompt: return JSON that fits current DB models
+        # Prompt: return JSON that fits current DB models, adapt to user details if provided
+        user_wrapper = Template(dedent(r'''\
+User: "$text_user"
 
-Vai trò: Bạn là CHUYÊN GIA TƯ VẤN DU LỊCH.
-Nhiệm vụ: Lên lịch trình du lịch chi tiết dựa trên yêu cầu của người dùng
-(từ điểm A đến B, mỗi ngày làm gì, đi đâu, phong cách chuyến đi là gì).
+Role: Professional travel advisor.
+Goal: Return ONLY valid JSON (no markdown, no extra text).
 
-YÊU CẦU OUTPUT QUAN TRỌNG:
-Hãy trả về kết quả dưới dạng JSON hợp lệ (tuyệt đối không kèm markdown ```json hay bất kỳ dẫn nhập nào), theo cấu trúc sau:
+Behavior rules:
+- If user provides origin, destination, dates, budget, preferences, or constraints, use them directly.
+- If any key info is missing, infer reasonable defaults and clearly reflect them in the response.
+- Use specific place names that match the user request.
+- If user only asks general questions, set schedule = [] and focus on chat_response.
 
-{{
-  "title": "Tên chuyến đi (ngắn gọn, hấp dẫn)",
-  "summary": "Mô tả tổng quan ngắn gọn về chuyến đi",
+JSON schema (keys required):
+{
+  "title": "string",
+  "summary": "string",
   "total_days": 3,
-  "main_destination_name": "Tên điểm đến chính (ví dụ: Đà Nẵng, Hội An, Đà Lạt)",
-  "travel_style": "Phong cách chuyến đi (ví dụ: nghỉ dưỡng, khám phá, ẩm thực, gia đình...)",
+  "main_destination_name": "string",
+  "travel_style": "string",
   "schedule": [
-    {{
+    {
       "day_number": 1,
       "morning": [
-        {{
-          "destination_name": "Tên địa điểm buổi sáng (vd: Bãi biển Mỹ Khê)",
-          "activity_title": "Tiêu đề hoạt động (vd: Tắm biển, ngắm bình minh)",
-          "activity_description": "Mô tả ngắn hoạt động (vd: Dậy sớm tắm biển, chụp hình, thư giãn...)"
-        }}
+        {
+          "destination_name": "string",
+          "activity_title": "string",
+          "activity_description": "string"
+        }
       ],
-      "afternoon": [
-        {{
-          "destination_name": "Tên địa điểm buổi chiều",
-          "activity_title": "Tiêu đề hoạt động buổi chiều",
-          "activity_description": "Mô tả hoạt động buổi chiều"
-        }}
-      ],
-      "evening": [
-        {{
-          "destination_name": "Tên địa điểm buổi tối",
-          "activity_title": "Tiêu đề hoạt động buổi tối",
-          "activity_description": "Mô tả hoạt động buổi tối"
-        }}
-      ]
-    }},
-    {{
-      "day_number": 2,
-      "morning": [ ... ],
-      "afternoon": [ ... ],
-      "evening": [ ... ]
-    }}
+      "afternoon": [ {"destination_name": "string", "activity_title": "string", "activity_description": "string"} ],
+      "evening": [ {"destination_name": "string", "activity_title": "string", "activity_description": "string"} ]
+    }
   ],
-  "chat_response": "Lời khuyên/lời chào thân thiện của AI dành cho người dùng (hiển thị trong khung chat)."
-}}
+  "airports": [
+    { "code": "string", "name": "string", "city": "string", "country": "string" }
+  ],
+  "flight_segments": [
+    {
+      "origin_airport_code": "string",
+      "destination_airport_code": "string",
+      "airline": "string",
+      "flight_number": "string",
+      "departure_time": "YYYY-MM-DDTHH:MM:SSZ",
+      "arrival_time": "YYYY-MM-DDTHH:MM:SSZ",
+      "price": 0
+    }
+  ],
+  "services": [
+    {
+      "destination_name": "string",
+      "service_type": "hotel|food|spa|activity|shopping|other",
+      "name": "string",
+      "description": "string",
+      "address": "string",
+      "price_from": 0,
+      "price_range": "string",
+      "rating_avg": 0,
+      "rating_count": 0,
+      "image_url": "string"
+    }
+  ],
+  "weather": [
+    { "destination_name": "string", "month": 1, "note": "string" }
+  ],
+  "preferences": ["string"],
+  "chat_response": "string"
+}
 
-Lưu ý:
-- total_days phải là SỐ NGUYÊN, tương ứng với số ngày trong schedule (nếu có thể).
-- Nếu người dùng chỉ hỏi chung, KHÔNG cần lập lịch trình:
-  + Hãy để "schedule": [] (mảng rỗng),
-  + Tập trung trả lời trong "chat_response".
-- Tuyệt đối không trả markdown, không dùng ``` bao quanh JSON.
-"""
-
-        # Gọi AI
+Constraints:
+- total_days must be an integer and match schedule length when possible.
+- service_type must be one of the allowed values.
+- airport code should be IATA if applicable.
+- No markdown or code fences.
+''')).substitute(text_user=text_user)
         ai_text = (ask_ai(user_wrapper) or "").strip()
 
         # Lưu ChatTurn (user chắc chắn đã đăng nhập)
@@ -261,60 +322,14 @@ Lưu ý:
         )
 
         ai_json = parse_ai_itinerary_json(ai_text)
-        itinerary_instance = None
-        itinerary_data = None
 
-        if isinstance(ai_json, dict):
-            schedule = ai_json.get("schedule") or []
-            has_schedule = isinstance(schedule, list) and len(schedule) > 0
-
-            # Tính total_days an toàn
-            total_days = ai_json.get("total_days")
-            if not isinstance(total_days, int) or total_days <= 0:
-                if isinstance(schedule, list) and len(schedule) > 0:
-                    total_days = len(schedule)
-                else:
-                    total_days = 1
-
-            # main_destination: get_or_create theo main_destination_name
-            main_destination = None
-            main_dest_name = (ai_json.get("main_destination_name") or "").strip()
-            if main_dest_name:
-                main_destination, _ = Destination.objects.get_or_create(
-                    name=main_dest_name,
-                    defaults={
-                        "short_description": "",
-                        "location": "",
-                        "latitude": None,
-                        "longitude": None,
-                        "image_url": None,
-                    },
-                )
-
-            try:
-                itinerary_instance = Itinerary.objects.create(
-                    user=user,
-                    base_itinerary=None,
-                    main_destination=main_destination,
-                    title=ai_json.get("title", "Lịch trình gợi ý từ AI"),
-                    summary=ai_json.get("summary", "") or "",
-                    total_days=total_days,
-                    budget_min=None,
-                    budget_max=None,
-                    travel_style=ai_json.get("travel_style", "") or "",
-                    source_type="ai",
-                    status="published",
-                    is_fixed=False,
-                    is_public=False,
-                )
-
-                if has_schedule:
-                    sync_itinerary_destinations_from_ai(itinerary_instance, ai_json)
-
-                itinerary_data = ItinerarySerializer(itinerary_instance).data
-            except Exception:
-                itinerary_instance = None
-                itinerary_data = None
+        draft = AIItineraryDraft.objects.create(
+            user=user,
+            text_user=text_user,
+            ai_raw=ai_text,
+            ai_parsed=ai_json if isinstance(ai_json, dict) else None,
+            status="pending",
+        )
 
         response_data = {
             "text_user": text_user,
@@ -322,6 +337,11 @@ Lưu ý:
             "saved_chat_turn": {
                 "id": turn.id,
                 "created_at": turn.created_at.isoformat()
+            },
+            "draft": {
+                "id": draft.id,
+                "status": draft.status,
+                "created_at": draft.created_at.isoformat()
             }
         }
 
@@ -329,9 +349,6 @@ Lưu ý:
             response_data["ai_parsed"] = ai_json
             if "chat_response" in ai_json:
                 response_data["chat_response"] = ai_json.get("chat_response")
-
-        if itinerary_data:
-            response_data["itinerary"] = itinerary_data
 
         return Response({
             "ok": True,
@@ -380,6 +397,86 @@ class ChatTurnHistoryAPIView(APIView):
             "count": len(data),
             "items": data
         }, status=200)
+
+
+
+class ItineraryDraftListView(generics.ListAPIView):
+    serializer_class = AIItineraryDraftSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        qs = AIItineraryDraft.objects.all()
+        user = self.request.user
+        if not user.is_superuser:
+            qs = qs.filter(user=user)
+        status_param = self.request.query_params.get("status")
+        if status_param:
+            qs = qs.filter(status=status_param)
+        return qs
+
+
+class ItineraryDraftDetailView(generics.RetrieveAPIView):
+    serializer_class = AIItineraryDraftSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        qs = AIItineraryDraft.objects.all()
+        user = self.request.user
+        if not user.is_superuser:
+            qs = qs.filter(user=user)
+        return qs
+
+
+class ItineraryDraftAcceptView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk: int):
+        draft = get_object_or_404(AIItineraryDraft, pk=pk)
+        user = request.user
+        if not user.is_superuser and draft.user_id != user.id:
+            return Response({"ok": False, "error": "Forbidden"}, status=403)
+
+        if draft.status == "accepted" and draft.accepted_itinerary_id:
+            itinerary = draft.accepted_itinerary
+            return Response({
+                "ok": True,
+                "draft": AIItineraryDraftSerializer(draft).data,
+                "itinerary": ItinerarySerializer(itinerary).data,
+            }, status=200)
+
+        ai_json = draft.ai_parsed or parse_ai_itinerary_json(draft.ai_raw)
+        if not isinstance(ai_json, dict):
+            return Response({"ok": False, "error": "Invalid AI data"}, status=400)
+
+        try:
+            itinerary = create_itinerary_from_ai(user, ai_json)
+        except Exception as exc:
+            return Response({"ok": False, "error": str(exc)}, status=400)
+
+        draft.status = "accepted"
+        draft.accepted_itinerary = itinerary
+        draft.save(update_fields=["status", "accepted_itinerary", "updated_at"])
+
+        return Response({
+            "ok": True,
+            "draft": AIItineraryDraftSerializer(draft).data,
+            "itinerary": ItinerarySerializer(itinerary).data,
+        }, status=201)
+
+
+class ItineraryDraftRejectView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk: int):
+        draft = get_object_or_404(AIItineraryDraft, pk=pk)
+        user = request.user
+        if not user.is_superuser and draft.user_id != user.id:
+            return Response({"ok": False, "error": "Forbidden"}, status=403)
+
+        draft.status = "rejected"
+        draft.save(update_fields=["status", "updated_at"])
+
+        return Response({"ok": True, "draft": AIItineraryDraftSerializer(draft).data}, status=200)
 
 
 # ========== AUTH ==========

@@ -6,6 +6,10 @@ from .views import (
     RegisterView,
     LoginView,
     LogoutView,
+    ItineraryDraftListView,
+    ItineraryDraftDetailView,
+    ItineraryDraftAcceptView,
+    ItineraryDraftRejectView,
     ServiceListCreateView,
     ServiceDetailView,
     WeatherInfoListCreateView,
@@ -25,6 +29,11 @@ from .views import (
 urlpatterns = [
     path('api/suggest-trip/', views.TravelPromptAPIView.as_view(), name='suggest-trip'),
     path("api/chat-turns/history/<int:pk>/", views.ChatTurnHistoryAPIView.as_view(), name="chatturn-history"),
+
+    path("api/itinerary-drafts/", ItineraryDraftListView.as_view(), name="itinerary-draft-list"),
+    path("api/itinerary-drafts/<int:pk>/", ItineraryDraftDetailView.as_view(), name="itinerary-draft-detail"),
+    path("api/itinerary-drafts/<int:pk>/accept/", ItineraryDraftAcceptView.as_view(), name="itinerary-draft-accept"),
+    path("api/itinerary-drafts/<int:pk>/reject/", ItineraryDraftRejectView.as_view(), name="itinerary-draft-reject"),
 
     path('api/register/', RegisterView.as_view(), name='register'),
     path('api/login/', LoginView.as_view(), name='login'),

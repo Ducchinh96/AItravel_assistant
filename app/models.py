@@ -32,6 +32,54 @@ class ChatTurn(models.Model):
 # =========================
 #  ĐIỂM ĐẾN / ĐỊA ĐIỂM
 # =========================
+
+# =========================
+#  AI ITINERARY DRAFT (PENDING USER APPROVAL)
+# =========================
+class AIItineraryDraft(models.Model):
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("accepted", "Accepted"),
+        ("rejected", "Rejected"),
+    ]
+
+    user = models.ForeignKey(
+        "auth.User",
+        on_delete=models.CASCADE,
+        related_name="ai_itinerary_drafts",
+        db_column="nguoidung",
+    )
+    text_user = models.TextField(db_column="noi_dung_nguoi_dung")
+    ai_raw = models.TextField(db_column="noi_dung_ai")
+    ai_parsed = models.JSONField(null=True, blank=True, db_column="ai_json")
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="pending",
+        db_column="trang_thai",
+    )
+    accepted_itinerary = models.ForeignKey(
+        "Itinerary",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approved_drafts",
+        db_column="lichtrinh_duyet",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_column="ngay_tao")
+    updated_at = models.DateTimeField(auto_now=True, db_column="ngay_cap_nhat")
+
+    class Meta:
+        db_table = "ai_lichtrinh_nhap"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["user", "status"]),
+            models.Index(fields=["created_at"]),
+        ]
+
+    def __str__(self):
+        return f"Draft #{self.id} - {self.user_id} ({self.status})"
+
 class Destination(models.Model):
     name = models.CharField(max_length=255, db_column='ten')
     short_description = models.TextField(

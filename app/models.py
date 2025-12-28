@@ -51,20 +51,12 @@ class AIItineraryDraft(models.Model):
     )
     text_user = models.TextField(db_column="noi_dung_nguoi_dung")
     ai_raw = models.TextField(db_column="noi_dung_ai")
-    ai_parsed = models.JSONField(null=True, blank=True, db_column="ai_json")
+    ai_payload = models.JSONField(null=True, blank=True, db_column="ai_payload")
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
         default="pending",
         db_column="trang_thai",
-    )
-    accepted_itinerary = models.ForeignKey(
-        "Itinerary",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="approved_drafts",
-        db_column="lichtrinh_duyet",
     )
     created_at = models.DateTimeField(auto_now_add=True, db_column="ngay_tao")
     updated_at = models.DateTimeField(auto_now=True, db_column="ngay_cap_nhat")
@@ -278,6 +270,42 @@ class Itinerary(models.Model):
         db_column='diemden_chinh'
     )
 
+    # Diem di/den
+    origin_destination = models.ForeignKey(
+        Destination,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='origin_itineraries',
+        db_column='diem_di'
+    )
+    destination_destination = models.ForeignKey(
+        Destination,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='destination_itineraries',
+        db_column='diem_den'
+    )
+
+    # San bay di/den
+    origin_airport = models.ForeignKey(
+        "Airport",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='origin_itineraries',
+        db_column='sanbay_di'
+    )
+    destination_airport = models.ForeignKey(
+        "Airport",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='destination_itineraries',
+        db_column='sanbay_den'
+    )
+
     title = models.CharField(max_length=255, db_column='tieu_de')
     summary = models.TextField(
         db_column='tong_quan',
@@ -344,6 +372,20 @@ class Itinerary(models.Model):
         through='ItineraryDestination',
         related_name='itineraries',
         blank=True
+    )
+
+    services = models.ManyToManyField(
+        Service,
+        related_name='itineraries',
+        blank=True,
+        db_table='lichtrinh_dichvu'
+    )
+
+    flight_segments = models.ManyToManyField(
+        "FlightSegment",
+        related_name='itineraries',
+        blank=True,
+        db_table='lichtrinh_changbay'
     )
 
     class Meta:

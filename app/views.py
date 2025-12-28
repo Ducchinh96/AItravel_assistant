@@ -327,7 +327,7 @@ Constraints:
             user=user,
             text_user=text_user,
             ai_raw=ai_text,
-            ai_parsed=ai_json if isinstance(ai_json, dict) else None,
+            ai_payload=ai_json if isinstance(ai_json, dict) else None,
             status="pending",
         )
 
@@ -346,7 +346,7 @@ Constraints:
         }
 
         if isinstance(ai_json, dict):
-            response_data["ai_parsed"] = ai_json
+            response_data["ai_payload"] = ai_json
             if "chat_response" in ai_json:
                 response_data["chat_response"] = ai_json.get("chat_response")
 
@@ -436,32 +436,23 @@ class ItineraryDraftAcceptView(APIView):
         if not user.is_superuser and draft.user_id != user.id:
             return Response({"ok": False, "error": "Forbidden"}, status=403)
 
-        if draft.status == "accepted" and draft.accepted_itinerary_id:
-            itinerary = draft.accepted_itinerary
+        if draft.status == "accepted":
             return Response({
                 "ok": True,
                 "draft": AIItineraryDraftSerializer(draft).data,
-                "itinerary": ItinerarySerializer(itinerary).data,
             }, status=200)
 
-        ai_json = draft.ai_parsed or parse_ai_itinerary_json(draft.ai_raw)
+        ai_json = draft.ai_payload or parse_ai_itinerary_json(draft.ai_raw)
         if not isinstance(ai_json, dict):
             return Response({"ok": False, "error": "Invalid AI data"}, status=400)
 
-        try:
-            itinerary = create_itinerary_from_ai(user, ai_json)
-        except Exception as exc:
-            return Response({"ok": False, "error": str(exc)}, status=400)
-
         draft.status = "accepted"
-        draft.accepted_itinerary = itinerary
-        draft.save(update_fields=["status", "accepted_itinerary", "updated_at"])
+        draft.save(update_fields=["status", "updated_at"])
 
         return Response({
             "ok": True,
             "draft": AIItineraryDraftSerializer(draft).data,
-            "itinerary": ItinerarySerializer(itinerary).data,
-        }, status=201)
+        }, status=200)
 
 
 class ItineraryDraftRejectView(APIView):
@@ -655,8 +646,11 @@ class PublicItineraryListView(generics.ListAPIView):
     permission_classes = [permissions.AllowAny]
 
     def get_queryset(self):
-        # Only show public itineraries, ordered by newest first
-        return Itinerary.objects.filter(is_public=True).order_by('-created_at')
+        # Only show public sample itineraries, ordered by newest first
+        return Itinerary.objects.filter(
+            is_public=True,
+            source_type="sample",
+        ).order_by('-created_at')
 
 
 class UserProfileView(generics.RetrieveUpdateAPIView):
@@ -1034,3 +1028,16 @@ class AdminStatisticsView(APIView):
             "ok": True,
             "statistics": statistics
         }, status=200)
+
+
+class AdminItineraryApproveView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def post(self, request, pk: int):
+        itinerary = get_object_or_404(Itinerary, pk=pk)
+        itinerary.source_type = "sample"
+        itinerary.is_fixed = True
+        itinerary.is_public = True
+        itinerary.status = "published"
+        itinerary.save(update_fields=["source_type", "is_fixed", "is_public", "status", "updated_at"])
+        return Response({"ok": True, "itinerary": ItinerarySerializer(itinerary).data}, status=200)

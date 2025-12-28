@@ -24,6 +24,7 @@ from .views import (
     PreferenceDetailView,
     UserPreferenceListCreateView,
     UserPreferenceDetailView,
+    AdminItineraryApproveView,
 )
 
 urlpatterns = [
@@ -75,4 +76,5 @@ urlpatterns = [
     path('api/admin/users/', views.AdminUserListView.as_view(), name='admin-user-list'),
     path('api/admin/users/<int:pk>/', views.AdminUserDetailView.as_view(), name='admin-user-detail'),
     path('api/admin/statistics/', views.AdminStatisticsView.as_view(), name='admin-statistics'),
+    path('api/admin/itineraries/<int:pk>/approve/', AdminItineraryApproveView.as_view(), name='admin-itinerary-approve'),
 ]

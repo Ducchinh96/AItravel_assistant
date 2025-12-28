@@ -82,7 +82,7 @@ CORS_ORIGIN_ALLOW_ALL = True  # Or specify origins if you want to restrict
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:3000',  # URL của React FE
 ]
-ROOT_URLCONF = 'app.urls'
+ROOT_URLCONF = 'travles.urls'
 
 TEMPLATES = [
     {

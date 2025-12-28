@@ -58,6 +58,14 @@ class AIItineraryDraft(models.Model):
         default="pending",
         db_column="trang_thai",
     )
+    is_public = models.BooleanField(
+        default=False,
+        db_column="cong_khai",
+    )
+    share_requested = models.BooleanField(
+        default=False,
+        db_column="yeu_cau_chia_se",
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_column="ngay_tao")
     updated_at = models.DateTimeField(auto_now=True, db_column="ngay_cap_nhat")
 
@@ -401,10 +409,10 @@ class Itinerary(models.Model):
 # =========================
 class ItineraryDestination(models.Model):
     PART_OF_DAY_CHOICES = [
-        ('morning', 'Buổi sáng'),
-        ('afternoon', 'Buổi chiều'),
-        ('evening', 'Buổi tối'),
-        ('full_day', 'Cả ngày'),
+        ('s?ng', 'Bu?i s?ng'),
+        ('chi?u', 'Bu?i chi?u'),
+        ('t?i', 'Bu?i t?i'),
+        ('c? ng?y', 'C? ng?y'),
     ]
 
     itinerary = models.ForeignKey(
@@ -486,12 +494,6 @@ class ItineraryReview(models.Model):
     class Meta:
         db_table = "danhgia"
         ordering = ["-created_at"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["itinerary", "user"],
-                name="uniq_danhgia_lichtrinh_nguoidung"
-            ),
-        ]
         indexes = [
             models.Index(fields=["itinerary"]),
             models.Index(fields=["user"]),
@@ -640,3 +642,46 @@ class UserPreference(models.Model):
 
     def __str__(self):
         return f"{self.user_id} - {self.preference.name}"
+
+
+# ======================================================
+#  BANG REVIEW / COMMENT CHO AI DRAFT
+# ======================================================
+class AIDraftReview(models.Model):
+    id = models.AutoField(primary_key=True, db_column="id")
+
+    draft = models.ForeignKey(
+        AIItineraryDraft,
+        on_delete=models.CASCADE,
+        related_name="reviews",
+        db_column="ai_lichtrinh",
+    )
+
+    user = models.ForeignKey(
+        "auth.User",
+        on_delete=models.CASCADE,
+        related_name="ai_itinerary_reviews",
+        db_column="nguoidung",
+    )
+
+    rating = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        db_column="so_sao",
+        help_text="So sao 1-5 cho AI itinerary",
+    )
+
+    comment = models.TextField(blank=True, db_column="noi_dung")
+    created_at = models.DateTimeField(auto_now_add=True, db_column="ngay_tao")
+
+    class Meta:
+        db_table = "ai_danhgia"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["draft"]),
+            models.Index(fields=["user"]),
+            models.Index(fields=["created_at"]),
+            models.Index(fields=["rating"]),
+        ]
+
+    def __str__(self):
+        return f"AI Review {self.draft_id} - {self.user_id} ({self.rating})"

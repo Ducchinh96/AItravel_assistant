@@ -7,6 +7,7 @@ from app.models import (
     Service,
     WeatherInfo,
     ItineraryReview,
+    AIDraftReview,
     Airport,
     FlightSegment,
     Preference,
@@ -19,11 +20,13 @@ from .serializers import (
     ItinerarySerializer,
     UserSerializer,
     DestinationSerializer,
+    DestinationDetailSerializer,
     AdminUserSerializer,
     ResetPasswordSerializer,
     ServiceSerializer,
     WeatherInfoSerializer,
     ItineraryReviewSerializer,
+    AIDraftReviewSerializer,
     AirportSerializer,
     FlightSegmentSerializer,
     PreferenceSerializer,
@@ -119,6 +122,13 @@ def sync_itinerary_destinations_from_ai(itinerary: Itinerary, ai_data: dict):
     if not isinstance(schedule, list):
         return
 
+    part_map = {
+        "morning": "sáng",
+        "afternoon": "chiều",
+        "evening": "tối",
+        "full_day": "cả ngày",
+    }
+
     for idx_day, day_block in enumerate(schedule, start=1):
         if not isinstance(day_block, dict):
             continue
@@ -165,7 +175,7 @@ def sync_itinerary_destinations_from_ai(itinerary: Itinerary, ai_data: dict):
                     itinerary=itinerary,
                     destination=dest,
                     day_number=day_number,
-                    part_of_day=part_of_day,
+                    part_of_day=part_map.get(part_of_day, part_of_day),
                     activity_title=activity_title,
                     activity_description=activity_description,
                     order=index,
@@ -248,6 +258,8 @@ Behavior rules:
 - If any key info is missing, infer reasonable defaults and clearly reflect them in the response.
 - Use specific place names that match the user request.
 - If user only asks general questions, set schedule = [] and focus on chat_response.
+ - For flight_segments: always include airline, flight_number, departure_time, arrival_time, and price when possible.
+ - For services: include address and image_url if available; keep descriptions short and useful.
 
 JSON schema (keys required):
 {
@@ -412,6 +424,12 @@ class ItineraryDraftListView(generics.ListAPIView):
         status_param = self.request.query_params.get("status")
         if status_param:
             qs = qs.filter(status=status_param)
+        is_public = self.request.query_params.get("is_public")
+        if is_public is not None:
+            if is_public.lower() in ["true", "1"]:
+                qs = qs.filter(is_public=True)
+            elif is_public.lower() in ["false", "0"]:
+                qs = qs.filter(is_public=False)
         return qs
 
 
@@ -447,7 +465,9 @@ class ItineraryDraftAcceptView(APIView):
             return Response({"ok": False, "error": "Invalid AI data"}, status=400)
 
         draft.status = "accepted"
-        draft.save(update_fields=["status", "updated_at"])
+        draft.is_public = False
+        draft.share_requested = False
+        draft.save(update_fields=["status", "is_public", "share_requested", "updated_at"])
 
         return Response({
             "ok": True,
@@ -465,7 +485,9 @@ class ItineraryDraftRejectView(APIView):
             return Response({"ok": False, "error": "Forbidden"}, status=403)
 
         draft.status = "rejected"
-        draft.save(update_fields=["status", "updated_at"])
+        draft.is_public = False
+        draft.share_requested = False
+        draft.save(update_fields=["status", "is_public", "share_requested", "updated_at"])
 
         return Response({"ok": True, "draft": AIItineraryDraftSerializer(draft).data}, status=200)
 
@@ -682,7 +704,7 @@ class DestinationDetailView(generics.RetrieveUpdateDestroyAPIView):
     - PUT/PATCH/DELETE: chỉ admin
     """
     queryset = Destination.objects.all()
-    serializer_class = DestinationSerializer
+    serializer_class = DestinationDetailSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
     def get_permissions(self):
@@ -850,6 +872,30 @@ class ItineraryReviewListCreateView(generics.ListCreateAPIView):
 class ItineraryReviewDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = ItineraryReview.objects.select_related("itinerary", "user").all()
     serializer_class = ItineraryReviewSerializer
+    permission_classes = [IsOwnerOrReadOnly]
+
+
+class AIDraftReviewListCreateView(generics.ListCreateAPIView):
+    serializer_class = AIDraftReviewSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        qs = AIDraftReview.objects.select_related("draft", "user").all()
+        draft_id = self.request.query_params.get("draft_id")
+        if draft_id:
+            qs = qs.filter(draft_id=draft_id)
+        user_id = self.request.query_params.get("user_id")
+        if user_id:
+            qs = qs.filter(user_id=user_id)
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class AIDraftReviewDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = AIDraftReview.objects.select_related("draft", "user").all()
+    serializer_class = AIDraftReviewSerializer
     permission_classes = [IsOwnerOrReadOnly]
 
 
@@ -1028,6 +1074,59 @@ class AdminStatisticsView(APIView):
             "ok": True,
             "statistics": statistics
         }, status=200)
+
+
+class PublicAIDraftListView(generics.ListAPIView):
+    serializer_class = AIItineraryDraftSerializer
+    permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        return AIItineraryDraft.objects.filter(
+            status="accepted",
+            is_public=True,
+        ).order_by("-created_at")
+
+
+class AdminAIDraftPublishView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def post(self, request, pk: int):
+        draft = get_object_or_404(AIItineraryDraft, pk=pk)
+        if draft.status != "accepted":
+            return Response(
+                {"ok": False, "error": "Draft must be accepted before publishing."},
+                status=400,
+            )
+        draft.is_public = True
+        draft.share_requested = False
+        draft.save(update_fields=["is_public", "share_requested", "updated_at"])
+        return Response({"ok": True, "draft": AIItineraryDraftSerializer(draft).data}, status=200)
+
+
+class AIDraftShareRequestView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk: int):
+        draft = get_object_or_404(AIItineraryDraft, pk=pk)
+        user = request.user
+        if not user.is_superuser and draft.user_id != user.id:
+            return Response({"ok": False, "error": "Forbidden"}, status=403)
+        if draft.status != "accepted":
+            return Response({"ok": False, "error": "Draft must be accepted first."}, status=400)
+        draft.share_requested = True
+        draft.save(update_fields=["share_requested", "updated_at"])
+        return Response({"ok": True, "draft": AIItineraryDraftSerializer(draft).data}, status=200)
+
+
+class AdminAIDraftRequestListView(generics.ListAPIView):
+    serializer_class = AIItineraryDraftSerializer
+    permission_classes = [permissions.IsAdminUser]
+
+    def get_queryset(self):
+        return AIItineraryDraft.objects.filter(
+            status="accepted",
+            share_requested=True,
+        ).order_by("-created_at")
 
 
 class AdminItineraryApproveView(APIView):

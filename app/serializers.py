@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.db.models import Q
 from django.contrib.auth.models import User
 
 from .models import (
@@ -10,6 +11,7 @@ from .models import (
     Itinerary,
     ItineraryDestination,
     ItineraryReview,
+    AIDraftReview,
     Airport,
     FlightSegment,
     Preference,
@@ -37,6 +39,8 @@ class AIItineraryDraftSerializer(serializers.ModelSerializer):
             "ai_raw",
             "ai_payload",
             "status",
+            "is_public",
+            "share_requested",
             "created_at",
             "updated_at",
         ]
@@ -163,6 +167,35 @@ class ItineraryDestinationSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "destination"]
 
 
+class ServiceSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Service
+        fields = [
+            "id",
+            "name",
+            "service_type",
+            "description",
+            "address",
+            "price_from",
+            "price_range",
+            "rating_avg",
+            "rating_count",
+            "image_url",
+        ]
+        read_only_fields = fields
+
+
+class WeatherInfoSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WeatherInfo
+        fields = [
+            "id",
+            "month",
+            "note",
+        ]
+        read_only_fields = fields
+
+
 class AirportSerializer(serializers.ModelSerializer):
     class Meta:
         model = Airport
@@ -201,6 +234,29 @@ class FlightSegmentSerializer(serializers.ModelSerializer):
             "price",
         ]
         read_only_fields = ["id", "origin_airport", "destination_airport"]
+
+
+class ItinerarySummarySerializer(serializers.ModelSerializer):
+    main_destination = DestinationSerializer(read_only=True)
+    origin_destination = DestinationSerializer(read_only=True)
+    destination_destination = DestinationSerializer(read_only=True)
+
+    class Meta:
+        model = Itinerary
+        fields = [
+            "id",
+            "title",
+            "summary",
+            "total_days",
+            "source_type",
+            "status",
+            "is_public",
+            "main_destination",
+            "origin_destination",
+            "destination_destination",
+            "created_at",
+        ]
+        read_only_fields = fields
 
 
 class ItinerarySerializer(serializers.ModelSerializer):
@@ -384,6 +440,30 @@ class ItinerarySerializer(serializers.ModelSerializer):
             ItineraryDestination.objects.create(itinerary=itinerary, **item)
 
 
+class DestinationDetailSerializer(DestinationSerializer):
+    services = ServiceSummarySerializer(many=True, read_only=True)
+    weather_infos = WeatherInfoSummarySerializer(many=True, read_only=True)
+    itineraries = serializers.SerializerMethodField()
+
+    class Meta(DestinationSerializer.Meta):
+        fields = DestinationSerializer.Meta.fields + [
+            "services",
+            "weather_infos",
+            "itineraries",
+        ]
+
+    def get_itineraries(self, obj):
+        request = self.context.get("request")
+        qs = Itinerary.objects.filter(
+            Q(main_destination=obj) | Q(itinerary_destinations__destination=obj)
+        ).distinct()
+        if request and request.user and request.user.is_authenticated:
+            qs = qs.filter(Q(is_public=True) | Q(user=request.user))
+        else:
+            qs = qs.filter(is_public=True)
+        return ItinerarySummarySerializer(qs.order_by("-created_at"), many=True).data
+
+
 class AdminUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
@@ -413,6 +493,22 @@ class ItineraryReviewSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "itinerary",
+            "user",
+            "rating",
+            "comment",
+            "created_at",
+        ]
+        read_only_fields = ["id", "user", "created_at"]
+
+
+class AIDraftReviewSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+
+    class Meta:
+        model = AIDraftReview
+        fields = [
+            "id",
+            "draft",
             "user",
             "rating",
             "comment",

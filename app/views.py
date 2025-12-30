@@ -1103,6 +1103,22 @@ class AdminAIDraftPublishView(APIView):
         return Response({"ok": True, "draft": AIItineraryDraftSerializer(draft).data}, status=200)
 
 
+class AdminAIDraftRejectShareView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def post(self, request, pk: int):
+        draft = get_object_or_404(AIItineraryDraft, pk=pk)
+        if draft.status != "accepted":
+            return Response(
+                {"ok": False, "error": "Draft must be accepted before rejecting share."},
+                status=400,
+            )
+        draft.share_requested = False
+        draft.is_public = False
+        draft.save(update_fields=["is_public", "share_requested", "updated_at"])
+        return Response({"ok": True, "draft": AIItineraryDraftSerializer(draft).data}, status=200)
+
+
 class AIDraftShareRequestView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 

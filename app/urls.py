@@ -27,6 +27,7 @@ from .views import (
     AdminItineraryApproveView,
     PublicAIDraftListView,
     AdminAIDraftPublishView,
+    AdminAIDraftRejectShareView,
     AIDraftShareRequestView,
     AdminAIDraftRequestListView,
     AIDraftReviewListCreateView,
@@ -87,6 +88,7 @@ urlpatterns = [
     path('api/itinerary-drafts/<int:pk>/request-share/', AIDraftShareRequestView.as_view(), name='ai-draft-request-share'),
     path('api/admin/itinerary-drafts/requests/', AdminAIDraftRequestListView.as_view(), name='ai-draft-request-list'),
     path('api/admin/itinerary-drafts/<int:pk>/publish/', AdminAIDraftPublishView.as_view(), name='ai-draft-publish'),
+    path('api/admin/itinerary-drafts/<int:pk>/reject-share/', AdminAIDraftRejectShareView.as_view(), name='ai-draft-reject-share'),
     path('api/ai-itinerary-reviews/', AIDraftReviewListCreateView.as_view(), name='ai-itinerary-review-list-create'),
     path('api/ai-itinerary-reviews/<int:pk>/', AIDraftReviewDetailView.as_view(), name='ai-itinerary-review-detail'),
 ]

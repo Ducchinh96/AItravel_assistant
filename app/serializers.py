@@ -197,9 +197,26 @@ class WeatherInfoSummarySerializer(serializers.ModelSerializer):
 
 
 class AirportSerializer(serializers.ModelSerializer):
+    destination = DestinationSerializer(read_only=True)
+    destination_id = serializers.PrimaryKeyRelatedField(
+        source="destination",
+        queryset=Destination.objects.all(),
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+
     class Meta:
         model = Airport
-        fields = ["id", "code", "name", "city", "country"]
+        fields = [
+            "id",
+            "code",
+            "name",
+            "city",
+            "country",
+            "destination",
+            "destination_id",
+        ]
         read_only_fields = ["id"]
 
 
@@ -443,13 +460,17 @@ class ItinerarySerializer(serializers.ModelSerializer):
 class DestinationDetailSerializer(DestinationSerializer):
     services = ServiceSummarySerializer(many=True, read_only=True)
     weather_infos = WeatherInfoSummarySerializer(many=True, read_only=True)
+    airports = AirportSerializer(many=True, read_only=True)
     itineraries = serializers.SerializerMethodField()
+    flight_segments = serializers.SerializerMethodField()
 
     class Meta(DestinationSerializer.Meta):
         fields = DestinationSerializer.Meta.fields + [
             "services",
             "weather_infos",
+            "airports",
             "itineraries",
+            "flight_segments",
         ]
 
     def get_itineraries(self, obj):
@@ -462,6 +483,12 @@ class DestinationDetailSerializer(DestinationSerializer):
         else:
             qs = qs.filter(is_public=True)
         return ItinerarySummarySerializer(qs.order_by("-created_at"), many=True).data
+
+    def get_flight_segments(self, obj):
+        qs = FlightSegment.objects.select_related(
+            "origin_airport", "destination_airport"
+        ).filter(destination_airport__destination=obj)
+        return FlightSegmentSerializer(qs.order_by("-departure_time", "id"), many=True).data
 
 
 class AdminUserSerializer(serializers.ModelSerializer):

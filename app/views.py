@@ -123,10 +123,10 @@ def sync_itinerary_destinations_from_ai(itinerary: Itinerary, ai_data: dict):
         return
 
     part_map = {
-        "morning": "sáng",
-        "afternoon": "chiều",
-        "evening": "tối",
-        "full_day": "cả ngày",
+        "morning": "s?ng",
+        "afternoon": "chi?u",
+        "evening": "t?i",
+        "full_day": "c? ng?y",
     }
 
     for idx_day, day_block in enumerate(schedule, start=1):
@@ -900,9 +900,15 @@ class AIDraftReviewDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 
 class AirportListCreateView(generics.ListCreateAPIView):
-    queryset = Airport.objects.all().order_by("code")
     serializer_class = AirportSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        qs = Airport.objects.all().order_by("code")
+        destination_id = self.request.query_params.get("destination_id")
+        if destination_id:
+            qs = qs.filter(destination_id=destination_id)
+        return qs
 
     def get_permissions(self):
         if self.request.method == "POST":
@@ -935,6 +941,9 @@ class FlightSegmentListCreateView(generics.ListCreateAPIView):
         destination_id = self.request.query_params.get("destination_airport_id")
         if destination_id:
             qs = qs.filter(destination_airport_id=destination_id)
+        destination_id = self.request.query_params.get("destination_id")
+        if destination_id:
+            qs = qs.filter(destination_airport__destination_id=destination_id)
         airline = self.request.query_params.get("airline")
         if airline:
             qs = qs.filter(airline__icontains=airline)

@@ -409,10 +409,10 @@ class Itinerary(models.Model):
 # =========================
 class ItineraryDestination(models.Model):
     PART_OF_DAY_CHOICES = [
-        ('s?ng', 'Bu?i s?ng'),
-        ('chi?u', 'Bu?i chi?u'),
-        ('t?i', 'Bu?i t?i'),
-        ('c? ng?y', 'C? ng?y'),
+        ("sáng", "Buổi sáng"),
+        ("chiều", "Buổi chiều"),
+        ("tối", "Buổi tối"),
+        ("cả ngày", "Cả ngày"),
     ]
 
     itinerary = models.ForeignKey(
@@ -511,6 +511,16 @@ class ItineraryReview(models.Model):
 class Airport(models.Model):
     id = models.AutoField(primary_key=True, db_column="id")
 
+    destination = models.ForeignKey(
+        Destination,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="airports",
+        db_column="diemden",
+        help_text="Optional link to a destination.",
+    )
+
     code = models.CharField(
         max_length=3,
         unique=True,
@@ -526,6 +536,7 @@ class Airport(models.Model):
         ordering = ["code"]
         indexes = [
             models.Index(fields=["code"]),
+            models.Index(fields=["destination"]),
             models.Index(fields=["city"]),
             models.Index(fields=["country"]),
         ]

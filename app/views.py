@@ -87,6 +87,16 @@ def parse_ai_itinerary_json(ai_text: str):
     return None
 
 
+
+
+
+def _coerce_float(value):
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 # ========= HELPER: Map schedule -> ItineraryDestination (theo model mới) =========
 def sync_itinerary_destinations_from_ai(itinerary: Itinerary, ai_data: dict):
     """
@@ -148,17 +158,45 @@ def sync_itinerary_destinations_from_ai(itinerary: Itinerary, ai_data: dict):
                 if not dest_name:
                     continue
 
-                # tìm hoặc tạo Destination theo tên
-                dest, _ = Destination.objects.get_or_create(
-                    name=dest_name,
-                    defaults={
-                        "short_description": "",
-                        "location": "",
-                        "latitude": None,
-                        "longitude": None,
-                        "image_url": None,
-                    },
+                dest_lat = _coerce_float(
+                    item.get("latitude")
+                    or item.get("lat")
+                    or item.get("destination_latitude")
+                    or item.get("destination_lat")
                 )
+                dest_lng = _coerce_float(
+                    item.get("longitude")
+                    or item.get("lng")
+                    or item.get("lon")
+                    or item.get("destination_longitude")
+                    or item.get("destination_lng")
+                )
+
+                defaults = {
+                    "short_description": "",
+                    "location": "",
+                    "image_url": None,
+                }
+                if dest_lat is not None:
+                    defaults["latitude"] = dest_lat
+                if dest_lng is not None:
+                    defaults["longitude"] = dest_lng
+
+                # tìm hoặc tạo Destination theo tên
+                dest, created = Destination.objects.get_or_create(
+                    name=dest_name,
+                    defaults=defaults,
+                )
+                if not created:
+                    update_fields = []
+                    if dest_lat is not None and dest.latitude is None:
+                        dest.latitude = dest_lat
+                        update_fields.append("latitude")
+                    if dest_lng is not None and dest.longitude is None:
+                        dest.longitude = dest_lng
+                        update_fields.append("longitude")
+                    if update_fields:
+                        dest.save(update_fields=update_fields)
 
                 activity_title = (
                     item.get("activity_title")
@@ -201,16 +239,50 @@ def create_itinerary_from_ai(user, ai_json: dict):
     main_destination = None
     main_dest_name = (ai_json.get("main_destination_name") or "").strip()
     if main_dest_name:
-        main_destination, _ = Destination.objects.get_or_create(
-            name=main_dest_name,
-            defaults={
-                "short_description": "",
-                "location": "",
-                "latitude": None,
-                "longitude": None,
-                "image_url": None,
-            },
+        main_lat = _coerce_float(
+            ai_json.get("main_destination_latitude")
+            or ai_json.get("main_destination_lat")
         )
+        main_lng = _coerce_float(
+            ai_json.get("main_destination_longitude")
+            or ai_json.get("main_destination_lng")
+            or ai_json.get("main_destination_lon")
+        )
+        if isinstance(ai_json.get("main_destination"), dict):
+            main_lat = _coerce_float(
+                ai_json["main_destination"].get("latitude")
+                or ai_json["main_destination"].get("lat")
+            ) or main_lat
+            main_lng = _coerce_float(
+                ai_json["main_destination"].get("longitude")
+                or ai_json["main_destination"].get("lng")
+                or ai_json["main_destination"].get("lon")
+            ) or main_lng
+
+        defaults = {
+            "short_description": "",
+            "location": "",
+            "image_url": None,
+        }
+        if main_lat is not None:
+            defaults["latitude"] = main_lat
+        if main_lng is not None:
+            defaults["longitude"] = main_lng
+
+        main_destination, created = Destination.objects.get_or_create(
+            name=main_dest_name,
+            defaults=defaults,
+        )
+        if not created:
+            update_fields = []
+            if main_lat is not None and main_destination.latitude is None:
+                main_destination.latitude = main_lat
+                update_fields.append("latitude")
+            if main_lng is not None and main_destination.longitude is None:
+                main_destination.longitude = main_lng
+                update_fields.append("longitude")
+            if update_fields:
+                main_destination.save(update_fields=update_fields)
 
     itinerary_instance = Itinerary.objects.create(
         user=user,
@@ -257,6 +329,7 @@ Behavior rules:
 - If user provides origin, destination, dates, budget, preferences, or constraints, use them directly.
 - If any key info is missing, infer reasonable defaults and clearly reflect them in the response.
 - Use specific place names that match the user request.
+- Include latitude and longitude (decimal degrees) for main destination and each activity destination when possible.
 - If user only asks general questions, set schedule = [] and focus on chat_response.
  - For flight_segments: always include airline, flight_number, departure_time, arrival_time, and price when possible.
  - For services: include address and image_url if available; keep descriptions short and useful.
@@ -267,6 +340,8 @@ JSON schema (keys required):
   "summary": "string",
   "total_days": 3,
   "main_destination_name": "string",
+  "main_destination_latitude": 0.0,
+  "main_destination_longitude": 0.0,
   "travel_style": "string",
   "schedule": [
     {
@@ -274,12 +349,14 @@ JSON schema (keys required):
       "morning": [
         {
           "destination_name": "string",
+          "latitude": 0.0,
+          "longitude": 0.0,
           "activity_title": "string",
           "activity_description": "string"
         }
       ],
-      "afternoon": [ {"destination_name": "string", "activity_title": "string", "activity_description": "string"} ],
-      "evening": [ {"destination_name": "string", "activity_title": "string", "activity_description": "string"} ]
+      "afternoon": [ {"destination_name": "string", "latitude": 0.0, "longitude": 0.0, "activity_title": "string", "activity_description": "string"} ],
+      "evening": [ {"destination_name": "string", "latitude": 0.0, "longitude": 0.0, "activity_title": "string", "activity_description": "string"} ]
     }
   ],
   "airports": [

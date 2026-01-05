@@ -151,6 +151,16 @@ class Service(models.Model):
 
     description = models.TextField(blank=True, db_column="mo_ta")
     address = models.CharField(max_length=255, blank=True, db_column="dia_chi")
+    latitude = models.FloatField(
+        null=True,
+        blank=True,
+        db_column="vi_do",
+    )
+    longitude = models.FloatField(
+        null=True,
+        blank=True,
+        db_column="kinh_do",
+    )
 
     # === MỚI: giá tham khảo từ ===
     price_from = models.DecimalField(
@@ -530,6 +540,16 @@ class Airport(models.Model):
     name = models.CharField(max_length=255, db_column="ten")
     city = models.CharField(max_length=255, blank=True, db_column="thanh_pho")
     country = models.CharField(max_length=255, blank=True, db_column="quoc_gia")
+    latitude = models.FloatField(
+        null=True,
+        blank=True,
+        db_column="vi_do",
+    )
+    longitude = models.FloatField(
+        null=True,
+        blank=True,
+        db_column="kinh_do",
+    )
 
     class Meta:
         db_table = "sanbay"
